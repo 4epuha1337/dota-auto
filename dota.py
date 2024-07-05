@@ -1,6 +1,7 @@
-import cv2
+import pictures as pic
 import numpy as np
 import pyautogui
+import cv2
 import time
 import tkinter as tk
 from tkinter import ttk
@@ -13,6 +14,7 @@ GAME_THRESHOLD = 0.85
 
 # Путь к файлу dota2.py
 DOTA2_SCRIPT_PATH = "dota2.py"
+DOTA2_PIC_PATH = "./icons/"
 
 # Функция для проверки, находится ли окно в свернутом состоянии
 def is_window_minimized(window):
@@ -39,12 +41,12 @@ def perform_dota2_actions():
 
     while True:
         # Проверяем наличие gamett.png
-        if image_exists('gamett.png', threshold=GAMETT_THRESHOLD):
+        if pic.image_exists(DOTA2_PIC_PATH+'gamett.png', threshold=GAMETT_THRESHOLD):
             print("Игра началась.")
             return True
         
         # Если gamett.png не найдено, ищем knopka.png и принимаем игру
-        if image_exists('knopka.png'):
+        if pic.image_exists(DOTA2_PIC_PATH+'knopka.png'):
             print("Кнопка принятия найдена. Принимаем игру...")
             accept_game()
         
@@ -59,7 +61,7 @@ def accept_game():
         screenshot = pyautogui.screenshot()
         screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         # Загружаем изображение кнопки принятия
-        accept_button_image = cv2.imread('knopka.png', cv2.IMREAD_COLOR)
+        accept_button_image = cv2.imread(DOTA2_PIC_PATH+'knopka.png', cv2.IMREAD_COLOR)
         # Сравниваем скриншот с изображением кнопки
         result = cv2.matchTemplate(screenshot, accept_button_image, cv2.TM_CCOEFF_NORMED)
         _, max_val, _, max_loc = cv2.minMaxLoc(result)
@@ -80,28 +82,6 @@ def accept_game():
             print("Кнопка принятия не найдена. Ждем 0.5 секунды и повторяем...")
             time.sleep(0.5)
 
-# Функция для проверки наличия изображения на экране
-def image_exists(image_path, threshold=GAMETT_THRESHOLD):
-    # Загружаем изображение gamett.png или knopka.png
-    image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    if image is None:
-        return False
-    
-    # Получаем скриншот экрана
-    screenshot = pyautogui.screenshot()
-    screenshot_np = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
-    
-    # Поиск изображения на скриншоте
-    result = cv2.matchTemplate(screenshot_np, image, cv2.TM_CCOEFF_NORMED)
-    _, max_val, _, _ = cv2.minMaxLoc(result)
-    
-    # Устанавливаем порог совпадения
-    if max_val >= threshold:
-        print(f"Найдено изображение {image_path} с коэффициентом совпадения {max_val}")
-        return True
-    
-    return False
-
 # Функция для запуска другого скрипта
 def run_dota2_script():
     print("Запуск скрипта dota2.py")
@@ -121,7 +101,7 @@ def start_script(repeat_count):
         
         if i < repeat_count - 1:
             check_count = 0
-            while not image_exists('game.png', threshold=GAME_THRESHOLD):
+            while not pic.image_exists(DOTA2_PIC_PATH+'game.png', threshold=GAME_THRESHOLD):
                 if check_count % 600 == 0:  # Печать сообщения каждые 10 минут (600 секунд)
                     print("Ожидание изображения game.png...")
                 time.sleep(1)
