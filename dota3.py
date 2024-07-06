@@ -4,6 +4,9 @@ import pyautogui
 import time
 import os
 
+# Отключение функции безопасности PyAutoGUI
+pyautogui.FAILSAFE = False
+
 # Путь к папке с изображениями
 ICON_DIR = "./icons/Items/"
 
@@ -27,37 +30,42 @@ def image_exists(image_name, threshold=THRESHOLD):
     if max_val >= threshold:
         print(f"Найдено изображение {image_name} с коэффициентом совпадения {max_val}")
         return True, max_loc, image.shape
-    else:
-        print(f"Изображение {image_name} не найдено.")
     
     return False, None, None
 
-# Функция для клика по изображению на экране
+# Функция для клика по изображению на экране с задержкой перед нажатием правой кнопки мыши
 def click_image(location, image_shape):
     image_center = (
         int(location[0] + image_shape[1] / 2),
         int(location[1] + image_shape[0] / 2)
     )
     x, y = image_center
-    pyautogui.click(x, y, button='right')
+    
+    # Наведение мыши на центр изображения с задержкой 0.5 секунды
+    pyautogui.moveTo(x, y)
+    time.sleep(0.2)  # Задержка 0.5 секунды, чтобы "залочить" мышь на изображении
+    
+    # Клик правой кнопкой мыши
+    pyautogui.click(button='right')
+    time.sleep(0.2)  # Задержка 1 секунда после клика
+    
+    # Возврат мыши в точку (0, 0)
+    pyautogui.moveTo(0, 0)
 
 def main():
     while True:
         # Проверка на наличие boots.png
         found_boots, location_boots, shape_boots = image_exists('boots.png')
         if found_boots:
-            time.sleep(1)  # Задержка перед кликом
             click_image(location_boots, shape_boots)
-            time.sleep(1)  # Задержка перед следующим действием
             
             # Проверка на наличие tango.png
             found_tango, location_tango, shape_tango = image_exists('tango.png')
             if found_tango:
-                time.sleep(1)  # Задержка перед кликом
                 click_image(location_tango, shape_tango)
                 break
         
-        time.sleep(5)  # Задержка между повторами проверки
+        time.sleep(0.3)  # Задержка между повторами проверки
 
     # Создание файла-сигнала о завершении скрипта
     with open("autozakup_complete.txt", "w") as signal_file:
