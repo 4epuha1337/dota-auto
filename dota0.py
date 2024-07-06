@@ -1,6 +1,7 @@
 import sys
 from PyQt5 import QtWidgets, QtCore
 import subprocess
+import os
 
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -9,6 +10,7 @@ class MainWindow(QtWidgets.QWidget):
         self.dota2_process = None
         self.dota3_process = None
         self.initUI()
+        self.initFileWatcher()
 
     def initUI(self):
         self.setGeometry(100, 100, 750, 550)
@@ -77,6 +79,16 @@ class MainWindow(QtWidgets.QWidget):
         self.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
         self.show()
 
+    def initFileWatcher(self):
+        self.file_watcher = QtCore.QFileSystemWatcher(self)
+        self.file_watcher.addPath(os.getcwd())
+        self.file_watcher.directoryChanged.connect(self.on_directory_changed)
+
+    def on_directory_changed(self, path):
+        if os.path.exists("autozakup_complete.txt"):
+            self.stop_dota3_script()
+            os.remove("autozakup_complete.txt")
+
     def stop_dota_script(self):
         if self.dota_process is not None:
             self.dota_process.terminate()
@@ -96,7 +108,9 @@ class MainWindow(QtWidgets.QWidget):
             self.dota3_process.terminate()
             self.dota3_process = None
             self.update_status_dota3("Автозакуп остановлен.")
+            self.auto_purchase_button.setText('Включить автозакуп')
             self.toggle_buttons()
+            self.auto_purchase_button.setEnabled(True)  # Делаем кнопку снова доступной
 
     def start_both_scripts(self):
         self.on_start_dota_click()
@@ -133,6 +147,8 @@ class MainWindow(QtWidgets.QWidget):
             self.update_status_dota3("Автозакуп запущен...")
             self.dota3_process = subprocess.Popen(["python", "dota3.py"])
             self.auto_purchase_button.setText('Отключить автозакуп')
+            self.toggle_buttons()
+            self.auto_purchase_button.setEnabled(False)  # Делаем кнопку недоступной до завершения запуска
         else:
             self.update_status_dota3("Автозакуп уже запущен.")
 
@@ -142,10 +158,8 @@ class MainWindow(QtWidgets.QWidget):
         else:
             self.stop_dota3_script()
 
-        if self.dota3_process is None:
-            self.auto_purchase_button.setText('Включить автозакуп')
-        else:
-            self.auto_purchase_button.setText('Отключить автозакуп')
+        # Делаем кнопку доступной сразу после нажатия (или после завершения процесса)
+        self.auto_purchase_button.setEnabled(True)
 
     def update_status_dota(self, message):
         self.status_label_dota.setText(message)
