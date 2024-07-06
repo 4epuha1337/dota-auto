@@ -1,7 +1,6 @@
 import sys
 from PyQt5 import QtWidgets, QtCore
 import subprocess
-import os
 
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -51,11 +50,11 @@ class MainWindow(QtWidgets.QWidget):
 
         # Столбец "Автозакуп"
         layout.addWidget(QtWidgets.QLabel('Автозакуп (dota3.py):'), 0, 2)
-        self.auto_purchase_checkbox = QtWidgets.QCheckBox('Включение автозакупа', self)
-        self.auto_purchase_checkbox.stateChanged.connect(self.on_auto_purchase_toggle)
-        layout.addWidget(self.auto_purchase_checkbox, 1, 2)
+        self.auto_purchase_button = QtWidgets.QPushButton('Включить автозакуп', self)
+        self.auto_purchase_button.clicked.connect(self.toggle_auto_purchase)
+        layout.addWidget(self.auto_purchase_button, 1, 2)
 
-        # Общие кнопки для запуска и остановки обоих скриптов
+        # Общие кнопки для запуска и остановки всех скриптов
         self.start_both_button = QtWidgets.QPushButton('Запустить все процессы', self)
         self.start_both_button.clicked.connect(self.start_both_scripts)
         layout.addWidget(self.start_both_button, 4, 0)
@@ -97,12 +96,12 @@ class MainWindow(QtWidgets.QWidget):
             self.dota3_process.terminate()
             self.dota3_process = None
             self.update_status_dota3("Автозакуп остановлен.")
-            self.auto_purchase_checkbox.setText('Включение автозакупа')
-            self.auto_purchase_checkbox.setCheckState(QtCore.Qt.Unchecked)
+            self.toggle_buttons()
 
     def start_both_scripts(self):
         self.on_start_dota_click()
         self.on_start_dota2_click()
+        self.on_start_dota3_click()
 
     def stop_both_scripts(self):
         self.stop_dota_script()
@@ -129,19 +128,24 @@ class MainWindow(QtWidgets.QWidget):
         else:
             self.update_status_dota2("Автопик уже запущен.")
 
-    def on_auto_purchase_toggle(self, state):
-        if state == QtCore.Qt.Checked:
-            self.start_dota3_script()
-        else:
-            self.stop_dota3_script()
-
-    def start_dota3_script(self):
+    def on_start_dota3_click(self):
         if self.dota3_process is None:
             self.update_status_dota3("Автозакуп запущен...")
             self.dota3_process = subprocess.Popen(["python", "dota3.py"])
-            self.auto_purchase_checkbox.setText('Выключить автозакуп')
+            self.auto_purchase_button.setText('Отключить автозакуп')
         else:
             self.update_status_dota3("Автозакуп уже запущен.")
+
+    def toggle_auto_purchase(self):
+        if self.dota3_process is None:
+            self.on_start_dota3_click()
+        else:
+            self.stop_dota3_script()
+
+        if self.dota3_process is None:
+            self.auto_purchase_button.setText('Включить автозакуп')
+        else:
+            self.auto_purchase_button.setText('Отключить автозакуп')
 
     def update_status_dota(self, message):
         self.status_label_dota.setText(message)
@@ -155,14 +159,22 @@ class MainWindow(QtWidgets.QWidget):
     def toggle_buttons(self):
         dota_running = self.dota_process is not None
         dota2_running = self.dota2_process is not None
+        dota3_running = self.dota3_process is not None
 
         self.start_dota_button.setEnabled(not dota_running)
         self.stop_dota_button.setEnabled(dota_running)
         self.start_dota2_button.setEnabled(not dota2_running)
         self.stop_dota2_button.setEnabled(dota2_running)
 
-        self.start_both_button.setEnabled(not (dota_running or dota2_running))
-        self.stop_both_button.setEnabled(dota_running or dota2_running)
+        if dota3_running:
+            self.auto_purchase_button.setText('Отключить автозакуп')
+        else:
+            self.auto_purchase_button.setText('Включить автозакуп')
+
+        self.auto_purchase_button.setEnabled(not dota3_running)
+
+        self.start_both_button.setEnabled(not (dota_running or dota2_running or dota3_running))
+        self.stop_both_button.setEnabled(dota_running or dota2_running or dota3_running)
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
