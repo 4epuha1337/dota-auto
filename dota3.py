@@ -40,20 +40,19 @@ def click_image(location, image_shape):
     )
     x, y = image_center
     pyautogui.click(x, y, button='right')
+    time.sleep(1)  # Задержка 1 секунда после клика
+    pyautogui.moveTo(0, 0)  # Перемещение мыши в точку (0, 0)
 
 def main():
     while True:
         # Проверка на наличие boots.png
         found_boots, location_boots, shape_boots = image_exists('boots.png')
         if found_boots:
-            time.sleep(1)  # Задержка перед кликом
             click_image(location_boots, shape_boots)
-            time.sleep(1)  # Задержка перед следующим действием
             
             # Проверка на наличие tango.png
             found_tango, location_tango, shape_tango = image_exists('tango.png')
             if found_tango:
-                time.sleep(1)  # Задержка перед кликом
                 click_image(location_tango, shape_tango)
                 break
         
