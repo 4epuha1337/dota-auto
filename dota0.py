@@ -8,10 +8,11 @@ class MainWindow(QtWidgets.QWidget):
         super().__init__()
         self.dota_process = None
         self.dota2_process = None
+        self.dota3_process = None
         self.initUI()
 
     def initUI(self):
-        self.setGeometry(100, 100, 550, 550)
+        self.setGeometry(100, 100, 750, 550)
         self.setWindowTitle('Jo4erio&4epuha')
 
         layout = QtWidgets.QGridLayout()
@@ -48,12 +49,18 @@ class MainWindow(QtWidgets.QWidget):
         self.stop_dota2_button.setEnabled(False)
         layout.addWidget(self.stop_dota2_button, 3, 1)
 
+        # Столбец "Автозакуп"
+        layout.addWidget(QtWidgets.QLabel('Автозакуп (dota3.py):'), 0, 2)
+        self.auto_purchase_checkbox = QtWidgets.QCheckBox('Включение автозакупа', self)
+        self.auto_purchase_checkbox.stateChanged.connect(self.on_auto_purchase_toggle)
+        layout.addWidget(self.auto_purchase_checkbox, 1, 2)
+
         # Общие кнопки для запуска и остановки обоих скриптов
-        self.start_both_button = QtWidgets.QPushButton('Запустить оба процесса', self)
+        self.start_both_button = QtWidgets.QPushButton('Запустить все процессы', self)
         self.start_both_button.clicked.connect(self.start_both_scripts)
         layout.addWidget(self.start_both_button, 4, 0)
 
-        self.stop_both_button = QtWidgets.QPushButton('Завершить оба процесса', self)
+        self.stop_both_button = QtWidgets.QPushButton('Завершить все процессы', self)
         self.stop_both_button.clicked.connect(self.stop_both_scripts)
         self.stop_both_button.setEnabled(False)
         layout.addWidget(self.stop_both_button, 4, 1)
@@ -63,6 +70,9 @@ class MainWindow(QtWidgets.QWidget):
 
         self.status_label_dota2 = QtWidgets.QLabel('Ожидание запуска автопика...', self)
         layout.addWidget(self.status_label_dota2, 5, 1)
+
+        self.status_label_dota3 = QtWidgets.QLabel('Ожидание запуска автозакупа...', self)
+        layout.addWidget(self.status_label_dota3, 5, 2)
 
         self.setLayout(layout)
         self.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
@@ -82,6 +92,14 @@ class MainWindow(QtWidgets.QWidget):
             self.update_status_dota2("Автопик остановлен.")
             self.toggle_buttons()
 
+    def stop_dota3_script(self):
+        if self.dota3_process is not None:
+            self.dota3_process.terminate()
+            self.dota3_process = None
+            self.update_status_dota3("Автозакуп остановлен.")
+            self.auto_purchase_checkbox.setText('Включение автозакупа')
+            self.auto_purchase_checkbox.setCheckState(QtCore.Qt.Unchecked)
+
     def start_both_scripts(self):
         self.on_start_dota_click()
         self.on_start_dota2_click()
@@ -89,6 +107,7 @@ class MainWindow(QtWidgets.QWidget):
     def stop_both_scripts(self):
         self.stop_dota_script()
         self.stop_dota2_script()
+        self.stop_dota3_script()
 
     def on_start_dota_click(self):
         if self.dota_process is None:
@@ -110,11 +129,28 @@ class MainWindow(QtWidgets.QWidget):
         else:
             self.update_status_dota2("Автопик уже запущен.")
 
+    def on_auto_purchase_toggle(self, state):
+        if state == QtCore.Qt.Checked:
+            self.start_dota3_script()
+        else:
+            self.stop_dota3_script()
+
+    def start_dota3_script(self):
+        if self.dota3_process is None:
+            self.update_status_dota3("Автозакуп запущен...")
+            self.dota3_process = subprocess.Popen(["python", "dota3.py"])
+            self.auto_purchase_checkbox.setText('Выключить автозакуп')
+        else:
+            self.update_status_dota3("Автозакуп уже запущен.")
+
     def update_status_dota(self, message):
         self.status_label_dota.setText(message)
 
     def update_status_dota2(self, message):
         self.status_label_dota2.setText(message)
+
+    def update_status_dota3(self, message):
+        self.status_label_dota3.setText(message)
 
     def toggle_buttons(self):
         dota_running = self.dota_process is not None
