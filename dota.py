@@ -43,7 +43,7 @@ def perform_dota2_actions():
             running = True
             
             for current_cycle in range(1, repeat_count + 1):
-                print(f"Идет выполнение цикла {current_cycle}/{repeat_count}")
+                print(f"Цикл {current_cycle}/{repeat_count} начат")
                 
                 # Ожидание появления изображения game.png
                 while not image_exists('game.png', threshold=GAMETT_THRESHOLD):
@@ -82,6 +82,16 @@ def perform_dota2_actions():
             
             running = False
             print("Скрипт завершен.")
+            
+            # Создание текстового файла autosearch.txt после завершения всех циклов
+            time.sleep(1)  # Добавляем задержку перед записью в файл
+            if current_cycle == repeat_count:
+                try:
+                    with open("autosearch.txt", "w") as f:
+                        f.write("Auto buy completed.")
+                        print("Создан текстовый файл autosearc.txt")
+                except Exception as e:
+                    print(f"Ошибка при записи в файл autosearch.txt: {e}")
         else:
             print("Окно Dota 2 не активно или свернуто.")
     else:
@@ -164,7 +174,16 @@ def accept_game():
 
 # Функция для запуска скрипта
 def start_script():
-    global running
+    global running, repeat_count
+
+    # Чтение числа циклов из файла repeat-dota.txt
+    try:
+        with open("repeat-dota.txt", "r") as f:
+            repeat_count = int(f.read().strip())
+            print(f"Прочитано число циклов из repeat-dota.txt: {repeat_count}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Ошибка чтения файла repeat-dota.txt: {e}")
+        return
 
     if activate_dota2_window():
         perform_dota2_actions()
@@ -181,16 +200,14 @@ class Dota2FileHandler(FileSystemEventHandler):
 
 # Основная функция для запуска скрипта
 def main():
-    global repeat_count, delay_between_cycles
+    global delay_between_cycles
     
     # Проверка аргументов командной строки
     if len(sys.argv) > 1:
         try:
-            repeat_count = int(sys.argv[1])
-            if len(sys.argv) > 2:
-                delay_between_cycles = int(sys.argv[2])
+            delay_between_cycles = int(sys.argv[1])
         except ValueError:
-            print("Ошибка: Некорректный ввод. Используются значения по умолчанию.")
+            print("Ошибка: Некорректный ввод. Используется значение по умолчанию.")
     
     observer = Observer()
     event_handler = Dota2FileHandler()
