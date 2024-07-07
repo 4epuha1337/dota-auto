@@ -81,7 +81,7 @@ def main():
                 print(f"Нажатие на boots.png и перемещение курсора в точку (0, 0)")
             else:
                 print("Поиск boots.png...")
-                time.sleep(3)  # Проверка раз в 3 секунды
+                time.sleep(1)  # Проверка раз в 3 секунды
         
         # Проверка на наличие tango.png
         found_tango = False
