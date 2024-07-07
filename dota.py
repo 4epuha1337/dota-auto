@@ -86,16 +86,21 @@ def perform_dota2_actions():
             # Создание текстового файла autosearch.txt после завершения всех циклов
             time.sleep(1)  # Добавляем задержку перед записью в файл
             if current_cycle == repeat_count:
-                try:
-                    with open("autosearch.txt", "w") as f:
-                        f.write("Auto buy completed.")
-                        print("Создан текстовый файл autosearc.txt")
-                except Exception as e:
-                    print(f"Ошибка при записи в файл autosearch.txt: {e}")
+                write_autosearch_file()
+
         else:
             print("Окно Dota 2 не активно или свернуто.")
     else:
         print("Окно Dota 2 не найдено.")
+
+# Функция для записи в файл autosearch.txt
+def write_autosearch_file():
+    try:
+        with open("autosearch.txt", "w") as f:
+            f.write("Auto buy completed.")
+            print("Создан текстовый файл autosearch.txt")
+    except Exception as e:
+        print(f"Ошибка при записи в файл autosearch.txt: {e}")
 
 # Функция для проверки наличия изображения на экране
 def image_exists(image_name, threshold=GAMETT_THRESHOLD):

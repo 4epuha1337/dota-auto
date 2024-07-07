@@ -1,4 +1,4 @@
-class Item(cost , png):
+class Item:
     def __init__(self, cost, png):
         self.cost = cost
         self.picture = png

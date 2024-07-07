@@ -8,7 +8,8 @@ import os
 ICON_DIR = "./icons/"
 
 # Файл для передачи количества повторений
-REPEAT_COUNT_FILE = "repeat_count.txt"
+REPEAT_COUNT_FILE = "repeat-dota2.txt"
+AUTO_PICK_FILE = "autopick.txt"
 
 def acceptGame():
     try:
@@ -18,9 +19,16 @@ def acceptGame():
         print(f"Файл {REPEAT_COUNT_FILE} не найден. Завершение программы.")
         return
     except ValueError:
-        print("Некорректное значение в файле repeat_count.txt. Завершение программы.")
+        print("Некорректное значение в файле repeat-dota2.txt. Завершение программы.")
         return
     
+    try:
+        # Удаляем файл autopick.txt перед началом работы
+        if os.path.exists(AUTO_PICK_FILE):
+            os.remove(AUTO_PICK_FILE)
+    except Exception as e:
+        print(f"Ошибка при удалении файла {AUTO_PICK_FILE}: {e}")
+
     for i in range(repeat_count):
         print(f"Цикл {i + 1}/{repeat_count}")
 
@@ -64,6 +72,14 @@ def acceptGame():
         if i < repeat_count - 1:
             print("Ожидание перед следующим циклом...")
             time.sleep(15)
+
+    # После завершения всех циклов создаем файл autopick.txt
+    try:
+        with open(AUTO_PICK_FILE, "w") as file:
+            file.write("autopick.txt created successfully")
+        print(f"Файл {AUTO_PICK_FILE} успешно создан.")
+    except Exception as e:
+        print(f"Ошибка при создании файла {AUTO_PICK_FILE}: {e}")
 
     print("Скрипт завершен.")
 
