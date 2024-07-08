@@ -1,17 +1,25 @@
 import sys
-from PyQt5 import QtWidgets, QtCore
-import subprocess
 import os
-import time
+import subprocess
+from PyQt5 import QtWidgets, QtCore, QtGui
+
+class Communicate(QtCore.QObject):
+    autosearch_found = QtCore.pyqtSignal()
 
 class MainWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
+        self.dota_status = "Выключено"
+        self.dota2_status = "Выключено"
+        self.dota3_status = "Выключено"
+        self.selected_heroes = []
+        self.communicate = Communicate()
         self.initUI()
         self.initFileWatcher()
         self.dota_process = None
         self.dota2_process = None
         self.dota3_process = None
+        self.communicate.autosearch_found.connect(self.check_auto_search_completion)
 
     def initUI(self):
         self.setGeometry(100, 100, 800, 600)
@@ -19,261 +27,436 @@ class MainWindow(QtWidgets.QWidget):
 
         layout = QtWidgets.QGridLayout()
 
-        # Column 1: Autosearch (dota.py)
-        layout.addWidget(QtWidgets.QLabel('Autosearch (dota.py):'), 0, 0)
-        self.repeat_count_spinbox_dota = QtWidgets.QSpinBox(self)
-        self.repeat_count_spinbox_dota.setMinimum(1)
-        self.repeat_count_spinbox_dota.setMaximum(100)
-        self.repeat_count_spinbox_dota.valueChanged.connect(self.update_status_dota_status)
-        layout.addWidget(self.repeat_count_spinbox_dota, 1, 0)
-
-        self.toggle_auto_search_checkbox = QtWidgets.QCheckBox('Выключено', self)
-        self.toggle_auto_search_checkbox.stateChanged.connect(self.on_toggle_auto_search_dota)
-        layout.addWidget(self.toggle_auto_search_checkbox, 2, 0)
-
-        # Column 2: Autopick (dota2.py)
-        layout.addWidget(QtWidgets.QLabel('Autopick (dota2.py):'), 0, 1)
-        self.repeat_count_spinbox_dota2 = QtWidgets.QSpinBox(self)
-        self.repeat_count_spinbox_dota2.setMinimum(1)
-        self.repeat_count_spinbox_dota2.setMaximum(100)
-        self.repeat_count_spinbox_dota2.valueChanged.connect(self.update_status_dota2_status)
-        layout.addWidget(self.repeat_count_spinbox_dota2, 1, 1)
-
-        self.toggle_auto_pick_checkbox = QtWidgets.QCheckBox('Выключено', self)
-        self.toggle_auto_pick_checkbox.stateChanged.connect(self.on_toggle_auto_pick_dota2)
-        layout.addWidget(self.toggle_auto_pick_checkbox, 2, 1)
-
-        # Column 3: Autobuy (dota3.py)
-        layout.addWidget(QtWidgets.QLabel('Autobuy (dota3.py):'), 0, 2)
-        self.repeat_count_spinbox_dota3 = QtWidgets.QSpinBox(self)
-        self.repeat_count_spinbox_dota3.setMinimum(1)
-        self.repeat_count_spinbox_dota3.setMaximum(100)
-        self.repeat_count_spinbox_dota3.valueChanged.connect(self.update_status_dota3_status)
-        layout.addWidget(self.repeat_count_spinbox_dota3, 1, 2)
-
-        self.toggle_auto_purchase_checkbox = QtWidgets.QCheckBox('Выключено', self)
-        self.toggle_auto_purchase_checkbox.stateChanged.connect(self.toggle_auto_purchase_dota3)
-        layout.addWidget(self.toggle_auto_purchase_checkbox, 2, 2)
-
-        # Status tab with tabs for each script
-        self.status_tabs = QtWidgets.QTabWidget(self)
-        tab_dota, self.status_label_dota_status, self.status_label_dota_cycles = self.create_status_tab('Autosearch')
-        self.status_tabs.addTab(tab_dota, 'Autosearch')
-        tab_dota2, self.status_label_dota2_status, self.status_label_dota2_cycles = self.create_status_tab('Autopick')
-        self.status_tabs.addTab(tab_dota2, 'Autopick')
-        tab_dota3, self.status_label_dota3_status, self.status_label_dota3_cycles = self.create_status_tab('Autobuy')
-        self.status_tabs.addTab(tab_dota3, 'Autobuy')
-        layout.addWidget(self.status_tabs, 0, 3, 3, 1)
-
+        # Tabs
+        self.tabs = QtWidgets.QTabWidget(self)
+        tab_main = self.create_main_tab()
+        tab_autosearch = self.create_autosearch_tab()
+        tab_autopick = self.create_autopick_tab()
+        tab_autobuy = self.create_autobuy_tab()
+        
+        self.tabs.addTab(tab_main, "Главная")
+        self.tabs.addTab(tab_autosearch, "Autosearch")
+        self.tabs.addTab(tab_autopick, "Autopick")
+        self.tabs.addTab(tab_autobuy, "Autobuy")
+        
+        layout.addWidget(self.tabs, 0, 0, 1, 1)
+        
         self.setLayout(layout)
-
-        # Start and Stop buttons for all scripts
-        self.start_both_button = QtWidgets.QPushButton('Запустить все процессы', self)
-        self.start_both_button.clicked.connect(self.start_both_scripts)
-        layout.addWidget(self.start_both_button, 4, 0)
-
-        self.stop_both_button = QtWidgets.QPushButton('Завершить все процессы', self)
-        self.stop_both_button.clicked.connect(self.stop_both_scripts)
-        layout.addWidget(self.stop_both_button, 4, 1)
-
-        self.start_selected_button = QtWidgets.QPushButton('Включить программу', self)
-        self.start_selected_button.clicked.connect(self.start_selected_scripts)
-        layout.addWidget(self.start_selected_button, 4, 2)
-
-        self.stop_selected_button = QtWidgets.QPushButton('Выключить программу', self)
-        self.stop_selected_button.clicked.connect(self.stop_selected_scripts)
-        layout.addWidget(self.stop_selected_button, 4, 3)
-
         self.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
         self.show()
 
-    def create_status_tab(self, script_name):
+    def create_main_tab(self):
+        tab = QtWidgets.QWidget()
+        layout = QtWidgets.QGridLayout()
+
+        # Column 1: Autosearch (dota.py)
+        layout.addWidget(QtWidgets.QLabel('Autosearch (dota.py):'), 0, 0)
+        self.status_label_dota_status = QtWidgets.QLabel(f'Состояние: {self.dota_status}', self)
+        layout.addWidget(self.status_label_dota_status, 1, 0)
+        
+        self.status_label_dota_cycles = QtWidgets.QLabel('Количество циклов: 1', self)
+        layout.addWidget(self.status_label_dota_cycles, 2, 0)
+
+        # Column 2: Autopick (dota2.py)
+        layout.addWidget(QtWidgets.QLabel('Autopick (dota2.py):'), 0, 1)
+        self.status_label_dota2_status = QtWidgets.QLabel(f'Состояние: {self.dota2_status}', self)
+        layout.addWidget(self.status_label_dota2_status, 1, 1)
+        
+        self.status_label_dota2_cycles = QtWidgets.QLabel('Количество циклов: 1', self)
+        layout.addWidget(self.status_label_dota2_cycles, 2, 1)
+
+        # Column 3: Autobuy (dota3.py)
+        layout.addWidget(QtWidgets.QLabel('Autobuy (dota3.py):'), 0, 2)
+        self.status_label_dota3_status = QtWidgets.QLabel(f'Состояние: {self.dota3_status}', self)
+        layout.addWidget(self.status_label_dota3_status, 1, 2)
+        
+        self.status_label_dota3_cycles = QtWidgets.QLabel('Количество циклов: 1', self)
+        layout.addWidget(self.status_label_dota3_cycles, 2, 2)
+
+        # Control buttons for all scripts
+        self.start_both_button = QtWidgets.QPushButton('Запустить все процессы', self)
+        self.start_both_button.clicked.connect(self.start_both_scripts)
+        layout.addWidget(self.start_both_button, 3, 0)
+
+        self.stop_both_button = QtWidgets.QPushButton('Завершить все процессы', self)
+        self.stop_both_button.clicked.connect(self.stop_both_scripts)
+        layout.addWidget(self.stop_both_button, 3, 1)
+
+        self.start_selected_button = QtWidgets.QPushButton('Включить программу', self)
+        self.start_selected_button.clicked.connect(self.start_selected_scripts)
+        layout.addWidget(self.start_selected_button, 3, 2)
+
+        self.stop_selected_button = QtWidgets.QPushButton('Выключить программу', self)
+        self.stop_selected_button.clicked.connect(self.stop_selected_scripts)
+        layout.addWidget(self.stop_selected_button, 3, 3)
+
+        tab.setLayout(layout)
+        return tab
+
+    def create_autosearch_tab(self):
         tab = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout()
 
-        groupbox_status = QtWidgets.QGroupBox('Status', self)
-        groupbox_layout = QtWidgets.QVBoxLayout(groupbox_status)
-        status_label_status = QtWidgets.QLabel(f'Состояние: Выключено', self)
-        groupbox_layout.addWidget(status_label_status)
-        status_label_cycles = QtWidgets.QLabel('Количество циклов: 1', self)  # Нумерация циклов с 1
-        groupbox_layout.addWidget(status_label_cycles)
+        layout.addWidget(QtWidgets.QLabel('Autosearch (dota.py):'))
+        
+        self.repeat_count_spinbox_dota = QtWidgets.QSpinBox(self)
+        self.repeat_count_spinbox_dota.setMinimum(1)
+        self.repeat_count_spinbox_dota.setMaximum(100)
+        layout.addWidget(self.repeat_count_spinbox_dota)
 
-        layout.addWidget(groupbox_status)
+        self.toggle_auto_search_checkbox = QtWidgets.QCheckBox('Выключено', self)
+        self.toggle_auto_search_checkbox.setChecked(False)
+        self.toggle_auto_search_checkbox.clicked.connect(self.toggle_auto_search)
+        layout.addWidget(self.toggle_auto_search_checkbox)
+
         tab.setLayout(layout)
+        return tab
 
-        return tab, status_label_status, status_label_cycles
+    def create_autopick_tab(self):
+        tab = QtWidgets.QWidget()
+        layout = QtWidgets.QGridLayout()
+
+        layout.addWidget(QtWidgets.QLabel('Autopick (dota2.py):'), 0, 0)
+        
+        self.repeat_count_spinbox_dota2 = QtWidgets.QSpinBox(self)
+        self.repeat_count_spinbox_dota2.setMinimum(1)
+        self.repeat_count_spinbox_dota2.setMaximum(100)
+        layout.addWidget(self.repeat_count_spinbox_dota2, 1, 0)
+
+        self.toggle_auto_pick_checkbox = QtWidgets.QCheckBox('Выключено', self)
+        self.toggle_auto_pick_checkbox.setChecked(False)
+        self.toggle_auto_pick_checkbox.clicked.connect(self.toggle_auto_pick)
+        layout.addWidget(self.toggle_auto_pick_checkbox, 2, 0)
+
+        # Добавление выбора героев
+        heroes_layout = QtWidgets.QGridLayout()
+        heroes_dir = "./icons/heroes/"
+
+        # Данные о героях
+        heroes_data = [
+            ("Anti-Mage", "icons/heroes/anti_mage.png"),
+            ("Axe", "icons/heroes/axe.png"),
+            ("Bane", "icons/heroes/bane.png"),
+            ("Bloodseeker", "icons/heroes/bloodseeker.png"),
+            ("Crystal Maiden", "icons/heroes/crystal_maiden.png"),
+            ("Drow Ranger", "icons/heroes/drow_ranger.png"),
+            ("Earthshaker", "icons/heroes/earthshaker.png"),
+            ("Juggernaut", "icons/heroes/juggernaut.png"),
+            ("Mirana", "icons/heroes/mirana.png"),
+            ("Morphling", "icons/heroes/morphling.png"),
+            ("Shadow Fiend", "icons/heroes/shadow_fiend.png"),
+            ("Phantom Lancer", "icons/heroes/phantom_lancer.png"),
+            ("Puck", "icons/heroes/puck.png"),
+            ("Pudge", "icons/heroes/pudge.png"),
+            ("Razor", "icons/heroes/razor.png"),
+            ("Sand King", "icons/heroes/sand_king.png"),
+            ("Storm Spirit", "icons/heroes/storm_spirit.png"),
+            ("Sven", "icons/heroes/sven.png"),
+            ("Tiny", "icons/heroes/tiny.png"),
+            ("Vengeful Spirit", "icons/heroes/vengeful_spirit.png"),
+            ("Windranger", "icons/heroes/windranger.png"),
+            ("Zeus", "icons/heroes/zeus.png"),
+            ("Kunkka", "icons/heroes/kunkka.png"),
+            ("Lina", "icons/heroes/lina.png"),
+            ("Lion", "icons/heroes/lion.png"),
+            ("Shadow Shaman", "icons/heroes/shadow_shaman.png"),
+            ("Slardar", "icons/heroes/slardar.png"),
+            ("Tidehunter", "icons/heroes/tidehunter.png"),
+            ("Witch Doctor", "icons/heroes/witch_doctor.png"),
+            ("Lich", "icons/heroes/lich.png"),
+            ("Riki", "icons/heroes/riki.png"),
+            ("Enigma", "icons/heroes/enigma.png"),
+            ("Tinker", "icons/heroes/tinker.png"),
+            ("Sniper", "icons/heroes/sniper.png"),
+            ("Necrophos", "icons/heroes/necrophos.png"),
+            ("Warlock", "icons/heroes/warlock.png"),
+            ("Beastmaster", "icons/heroes/beastmaster.png"),
+            ("Queen of Pain", "icons/heroes/queen_of_pain.png"),
+            ("Venomancer", "icons/heroes/venomancer.png"),
+            ("Faceless Void", "icons/heroes/faceless_void.png"),
+            ("Wraith King", "icons/heroes/wraith_king.png"),
+            ("Death Prophet", "icons/heroes/death_prophet.png"),
+            ("Phantom Assassin", "icons/heroes/phantom_assassin.png"),
+            ("Pugna", "icons/heroes/pugna.png"),
+            ("Templar Assassin", "icons/heroes/templar_assassin.png"),
+            ("Viper", "icons/heroes/viper.png"),
+            ("Luna", "icons/heroes/luna.png"),
+            ("Dragon Knight", "icons/heroes/dragon_knight.png"),
+            ("Dazzle", "icons/heroes/dazzle.png"),
+            ("Clockwerk", "icons/heroes/clockwerk.png"),
+            ("Leshrac", "icons/heroes/leshrac.png"),
+            ("Nature's Prophet", "icons/heroes/natures_prophet.png"),
+            ("Lifestealer", "icons/heroes/lifestealer.png"),
+            ("Dark Seer", "icons/heroes/dark_seer.png"),
+            ("Clinkz", "icons/heroes/clinkz.png"),
+            ("Omniknight", "icons/heroes/omniknight.png"),
+            ("Enchantress", "icons/heroes/enchantress.png"),
+            ("Huskar", "icons/heroes/huskar.png"),
+            ("Night Stalker", "icons/heroes/night_stalker.png"),
+            ("Broodmother", "icons/heroes/broodmother.png"),
+            ("Bounty Hunter", "icons/heroes/bounty_hunter.png"),
+            ("Weaver", "icons/heroes/weaver.png"),
+            ("Jakiro", "icons/heroes/jakiro.png"),
+            ("Batrider", "icons/heroes/batrider.png"),
+            ("Chen", "icons/heroes/chen.png"),
+            ("Spectre", "icons/heroes/spectre.png"),
+            ("Ancient Apparition", "icons/heroes/ancient_apparition.png"),
+            ("Doom", "icons/heroes/doom.png"),
+            ("Ursa", "icons/heroes/ursa.png"),
+            ("Spirit Breaker", "icons/heroes/spirit_breaker.png"),
+            ("Gyrocopter", "icons/heroes/gyrocopter.png"),
+            ("Alchemist", "icons/heroes/alchemist.png"),
+            ("Invoker", "icons/heroes/invoker.png"),
+            ("Silencer", "icons/heroes/silencer.png"),
+            ("Outworld Devourer", "icons/heroes/outworld_devourer.png"),
+            ("Lycan", "icons/heroes/lycan.png"),
+            ("Brewmaster", "icons/heroes/brewmaster.png"),
+            ("Shadow Demon", "icons/heroes/shadow_demon.png"),
+            ("Lone Druid", "icons/heroes/lone_druid.png"),
+            ("Chaos Knight", "icons/heroes/chaos_knight.png"),
+            ("Meepo", "icons/heroes/meepo.png"),
+            ("Treant Protector", "icons/heroes/treant_protector.png"),
+            ("Ogre Magi", "icons/heroes/ogre_magi.png"),
+            ("Undying", "icons/heroes/undying.png"),
+            ("Rubick", "icons/heroes/rubick.png"),
+            ("Disruptor", "icons/heroes/disruptor.png"),
+            ("Nyx Assassin", "icons/heroes/nyx_assassin.png"),
+            ("Naga Siren", "icons/heroes/naga_siren.png"),
+            ("Keeper of the Light", "icons/heroes/keeper_of_the_light.png"),
+            ("Io", "icons/heroes/io.png"),
+            ("Visage", "icons/heroes/visage.png"),
+            ("Slark", "icons/heroes/slark.png"),
+            ("Medusa", "icons/heroes/medusa.png"),
+            ("Troll Warlord", "icons/heroes/troll_warlord.png"),
+            ("Centaur Warrunner", "icons/heroes/centaur_warrunner.png"),
+            ("Magnus", "icons/heroes/magnus.png"),
+            ("Timbersaw", "icons/heroes/timbersaw.png"),
+            ("Bristleback", "icons/heroes/bristleback.png"),
+            ("Tusk", "icons/heroes/tusk.png"),
+            ("Skywrath Mage", "icons/heroes/skywrath_mage.png"),
+            ("Abaddon", "icons/heroes/abaddon.png"),
+            ("Elder Titan", "icons/heroes/elder_titan.png"),
+            ("Legion Commander", "icons/heroes/legion_commander.png"),
+            ("Ember Spirit", "icons/heroes/ember_spirit.png"),
+            ("Earth Spirit", "icons/heroes/earth_spirit.png"),
+            ("Underlord", "icons/heroes/underlord.png"),
+            ("Terrorblade", "icons/heroes/terrorblade.png"),
+            ("Phoenix", "icons/heroes/phoenix.png"),
+            ("Oracle", "icons/heroes/oracle.png"),
+            ("Techies", "icons/heroes/techies.png"),
+            ("Winter Wyvern", "icons/heroes/winter_wyvern.png"),
+            ("Arc Warden", "icons/heroes/arc_warden.png"),
+            ("Monkey King", "icons/heroes/monkey_king.png"),
+            ("Dark Willow", "icons/heroes/dark_willow.png"),
+            ("Pangolier", "icons/heroes/pangolier.png"),
+            ("Grimstroke", "icons/heroes/grimstroke.png"),
+            ("Hoodwink", "icons/heroes/hoodwink.png"),
+            ("Void Spirit", "icons/heroes/void_spirit.png"),
+            ("Snapfire", "icons/heroes/snapfire.png"),
+            ("Mars", "icons/heroes/mars.png"),
+            ("Dawnbreaker", "icons/heroes/dawnbreaker.png"),
+            ("Marci", "icons/heroes/marci.png"),
+            ("Primal Beast", "icons/heroes/primal_beast.png"),
+            ("Muerta", "icons/heroes/muerta.png")
+        ]
+
+        self.hero_buttons = []
+
+        # Создание кнопок для каждого героя
+        row = 0
+        col = 0
+        for hero_name, hero_icon_path in heroes_data:
+            hero_button = QtWidgets.QPushButton(hero_name, self)
+            hero_button.setIcon(QtGui.QIcon(hero_icon_path))
+            hero_button.setIconSize(QtCore.QSize(64, 64))
+            hero_button.clicked.connect(lambda checked, name=hero_name: self.hero_button_clicked(name))
+            self.hero_buttons.append(hero_button)
+            heroes_layout.addWidget(hero_button, row, col)
+            col += 1
+            if col > 3:
+                col = 0
+                row += 1
+
+        layout.addLayout(heroes_layout, 3, 0)
+
+        tab.setLayout(layout)
+        return tab
+
+    def create_autobuy_tab(self):
+        tab = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout()
+
+        layout.addWidget(QtWidgets.QLabel('Autobuy (dota3.py):'))
+        
+        self.repeat_count_spinbox_dota3 = QtWidgets.QSpinBox(self)
+        self.repeat_count_spinbox_dota3.setMinimum(1)
+        self.repeat_count_spinbox_dota3.setMaximum(100)
+        layout.addWidget(self.repeat_count_spinbox_dota3)
+
+        self.toggle_auto_buy_checkbox = QtWidgets.QCheckBox('Выключено', self)
+        self.toggle_auto_buy_checkbox.setChecked(False)
+        self.toggle_auto_buy_checkbox.clicked.connect(self.toggle_auto_buy)
+        layout.addWidget(self.toggle_auto_buy_checkbox)
+
+        tab.setLayout(layout)
+        return tab
 
     def initFileWatcher(self):
-        self.file_watcher = QtCore.QFileSystemWatcher(self)
-        self.file_watcher.addPath(os.getcwd())
-        self.file_watcher.directoryChanged.connect(self.on_directory_changed)
+        self.file_watcher_dota = QtCore.QFileSystemWatcher()
+        self.file_watcher_dota.addPath('dota.py')
+        self.file_watcher_dota.fileChanged.connect(self.dota_script_changed)
 
-    def on_directory_changed(self, path):
-        self.check_auto_search_completion()
-        self.check_auto_pick_completion()
-        self.check_auto_buy_status()
+        self.file_watcher_dota2 = QtCore.QFileSystemWatcher()
+        self.file_watcher_dota2.addPath('dota2.py')
+        self.file_watcher_dota2.fileChanged.connect(self.dota2_script_changed)
 
-    def check_auto_search_completion(self):
-        if os.path.exists("autosearch.txt") and self.dota_process is not None:
-            self.stop_dota_script()
-            self.toggle_auto_search_checkbox.setChecked(False)
-            self.safe_remove_file("autosearch.txt")
-            self.safe_remove_file("repeat-dota.txt")
-            self.update_status_dota("Автопоиск завершён.")
+        self.file_watcher_dota3 = QtCore.QFileSystemWatcher()
+        self.file_watcher_dota3.addPath('dota3.py')
+        self.file_watcher_dota3.fileChanged.connect(self.dota3_script_changed)
 
-    def check_auto_pick_completion(self):
-        if os.path.exists("autopick.txt") and self.dota2_process is not None:
-            self.stop_dota2_script()
-            self.toggle_auto_pick_checkbox.setChecked(False)
-            self.safe_remove_file("autopick.txt")
-            self.safe_remove_file("repeat-dota2.txt")
-            self.update_status_dota2("Автопик завершён.")
+    def dota_script_changed(self):
+        if self.dota_process:
+            self.dota_process.kill()
+            self.dota_process = None
+            self.dota_status = "Выключено"
+            self.status_label_dota_status.setText(f'Состояние: {self.dota_status}')
 
-    def check_auto_buy_status(self):
-        if os.path.exists("autobuy.txt") and self.dota3_process is not None:
-            self.stop_dota3_script()
-            self.toggle_auto_purchase_checkbox.setChecked(False)
-            self.safe_remove_file("autobuy.txt")
-            self.safe_remove_file("repeat-dota3.txt")
-            self.update_status_dota3("Автозакуп завершён.")
+    def dota2_script_changed(self):
+        if self.dota2_process:
+            self.dota2_process.kill()
+            self.dota2_process = None
+            self.dota2_status = "Выключено"
+            self.status_label_dota2_status.setText(f'Состояние: {self.dota2_status}')
+
+    def dota3_script_changed(self):
+        if self.dota3_process:
+            self.dota3_process.kill()
+            self.dota3_process = None
+            self.dota3_status = "Выключено"
+            self.status_label_dota3_status.setText(f'Состояние: {self.dota3_status}')
+
+    def toggle_auto_search(self, state):
+        if state:
+            self.toggle_auto_search_checkbox.setText('Включено')
+            self.dota_status = "Включено"
+            self.status_label_dota_status.setText(f'Состояние: {self.dota_status}')
+        else:
+            self.toggle_auto_search_checkbox.setText('Выключено')
+            self.dota_status = "Выключено"
+            self.status_label_dota_status.setText(f'Состояние: {self.dota_status}')
+
+    def toggle_auto_pick(self, state):
+        if state:
+            self.toggle_auto_pick_checkbox.setText('Включено')
+            self.dota2_status = "Включено"
+            self.status_label_dota2_status.setText(f'Состояние: {self.dota2_status}')
+        else:
+            self.toggle_auto_pick_checkbox.setText('Выключено')
+            self.dota2_status = "Выключено"
+            self.status_label_dota2_status.setText(f'Состояние: {self.dota2_status}')
+
+    def toggle_auto_buy(self, state):
+        if state:
+            self.toggle_auto_buy_checkbox.setText('Включено')
+            self.dota3_status = "Включено"
+            self.status_label_dota3_status.setText(f'Состояние: {self.dota3_status}')
+        else:
+            self.toggle_auto_buy_checkbox.setText('Выключено')
+            self.dota3_status = "Выключено"
+            self.status_label_dota3_status.setText(f'Состояние: {self.dota3_status}')
+
+    def start_both_scripts(self):
+        if not self.dota_process:
+            self.dota_process = subprocess.Popen(['python', 'dota.py'])
+            self.dota_status = "Запущено"
+            self.status_label_dota_status.setText(f'Состояние: {self.dota_status}')
+
+        if not self.dota2_process:
+            self.dota2_process = subprocess.Popen(['python', 'dota2.py'])
+            self.dota2_status = "Запущено"
+            self.status_label_dota2_status.setText(f'Состояние: {self.dota2_status}')
+
+        if not self.dota3_process:
+            self.dota3_process = subprocess.Popen(['python', 'dota3.py'])
+            self.dota3_status = "Запущено"
+            self.status_label_dota3_status.setText(f'Состояние: {self.dota3_status}')
+
+    def stop_both_scripts(self):
+        if self.dota_process:
+            self.dota_process.kill()
+            self.dota_process = None
+            self.dota_status = "Выключено"
+            self.status_label_dota_status.setText(f'Состояние: {self.dota_status}')
+
+        if self.dota2_process:
+            self.dota2_process.kill()
+            self.dota2_process = None
+            self.dota2_status = "Выключено"
+            self.status_label_dota2_status.setText(f'Состояние: {self.dota2_status}')
+
+        if self.dota3_process:
+            self.dota3_process.kill()
+            self.dota3_process = None
+            self.dota3_status = "Выключено"
+            self.status_label_dota3_status.setText(f'Состояние: {self.dota3_status}')
 
     def start_selected_scripts(self):
         if self.toggle_auto_search_checkbox.isChecked():
-            self.start_dota_script()
-            self.create_repeat_file("repeat-dota.txt", self.repeat_count_spinbox_dota.value())
+            self.dota_process = subprocess.Popen(['python', 'dota.py'])
+            self.dota_status = "Запущено"
+            self.status_label_dota_status.setText(f'Состояние: {self.dota_status}')
+
         if self.toggle_auto_pick_checkbox.isChecked():
-            self.start_dota2_script()
-            self.create_repeat_file("repeat-dota2.txt", self.repeat_count_spinbox_dota2.value())
-        if self.toggle_auto_purchase_checkbox.isChecked():
-            self.start_dota3_script()
-            self.create_repeat_file("repeat-dota3.txt", self.repeat_count_spinbox_dota3.value())
+            self.dota2_process = subprocess.Popen(['python', 'dota2.py'])
+            self.dota2_status = "Запущено"
+            self.status_label_dota2_status.setText(f'Состояние: {self.dota2_status}')
+
+        if self.toggle_auto_buy_checkbox.isChecked():
+            self.dota3_process = subprocess.Popen(['python', 'dota3.py'])
+            self.dota3_status = "Запущено"
+            self.status_label_dota3_status.setText(f'Состояние: {self.dota3_status}')
 
     def stop_selected_scripts(self):
-        if self.dota_process is not None:
-            self.stop_dota_script()
-        if self.dota2_process is not None:
-            self.stop_dota2_script()
-        if self.dota3_process is not None:
-            self.stop_dota3_script()
-
-    def on_toggle_auto_search_dota(self):
         if self.toggle_auto_search_checkbox.isChecked():
-            self.toggle_auto_search_checkbox.setText('Включено')
-            self.update_status_dota("В ожидании")
-        else:
-            self.toggle_auto_search_checkbox.setText('Выключено')
-            self.update_status_dota("Выключено")
+            if self.dota_process:
+                self.dota_process.kill()
+                self.dota_process = None
+                self.dota_status = "Выключено"
+                self.status_label_dota_status.setText(f'Состояние: {self.dota_status}')
 
-    def on_toggle_auto_pick_dota2(self):
         if self.toggle_auto_pick_checkbox.isChecked():
-            self.toggle_auto_pick_checkbox.setText('Включено')
-            self.update_status_dota2("В ожидании")
+            if self.dota2_process:
+                self.dota2_process.kill()
+                self.dota2_process = None
+                self.dota2_status = "Выключено"
+                self.status_label_dota2_status.setText(f'Состояние: {self.dota2_status}')
+
+        if self.toggle_auto_buy_checkbox.isChecked():
+            if self.dota3_process:
+                self.dota3_process.kill()
+                self.dota3_process = None
+                self.dota3_status = "Выключено"
+                self.status_label_dota3_status.setText(f'Состояние: {self.dota3_status}')
+
+    def hero_button_clicked(self, hero_name):
+        if hero_name not in self.selected_heroes:
+            self.selected_heroes.append(hero_name)
         else:
-            self.toggle_auto_pick_checkbox.setText('Выключено')
-            self.update_status_dota2("Выключено")
+            self.selected_heroes.remove(hero_name)
 
-    def toggle_auto_purchase_dota3(self):
-        if self.toggle_auto_purchase_checkbox.isChecked():
-            self.toggle_auto_purchase_checkbox.setText('Включено')
-            self.update_status_dota3("В ожидании")
-        else:
-            self.toggle_auto_purchase_checkbox.setText('Выключено')
-            self.update_status_dota3("Выключено")
+        # Обновление визуального состояния кнопок героев
+        for button in self.hero_buttons:
+            if button.text() in self.selected_heroes:
+                button.setStyleSheet("background-color: lightgreen;")
+            else:
+                button.setStyleSheet("")
 
-    def start_both_scripts(self):
-        if not self.toggle_auto_search_checkbox.isChecked():
-            self.start_dota_script()
-            self.create_repeat_file("repeat-dota.txt", self.repeat_count_spinbox_dota.value())
-        if not self.toggle_auto_pick_checkbox.isChecked():
-            self.start_dota2_script()
-            self.create_repeat_file("repeat-dota2.txt", self.repeat_count_spinbox_dota2.value())
-        if not self.toggle_auto_purchase_checkbox.isChecked():
-            self.start_dota3_script()
-            self.create_repeat_file("repeat-dota3.txt", self.repeat_count_spinbox_dota3.value())
+        # Вывод списка выбранных героев в консоль (для отладки)
+        print("Выбранные герои:", self.selected_heroes)
 
-        self.toggle_auto_search_checkbox.setChecked(True)
-        self.toggle_auto_pick_checkbox.setChecked(True)
-        self.toggle_auto_purchase_checkbox.setChecked(True)
-
-    def stop_both_scripts(self):
-        if self.dota_process is not None:
-            self.stop_dota_script()
-        if self.dota2_process is not None:
-            self.stop_dota2_script()
-        if self.dota3_process is not None:
-            self.stop_dota3_script()
-
-        self.toggle_auto_search_checkbox.setChecked(False)
-        self.toggle_auto_pick_checkbox.setChecked(False)
-        self.toggle_auto_purchase_checkbox.setChecked(False)
-
-    def start_dota_script(self):
-        self.dota_process = subprocess.Popen(['python', 'dota.py'])
-        self.create_repeat_file("repeat-dota.txt", self.repeat_count_spinbox_dota.value())
-
-    def stop_dota_script(self):
-        if self.dota_process is not None:
-            self.dota_process.terminate()
-            self.dota_process = None
-
-    def start_dota2_script(self):
-        self.dota2_process = subprocess.Popen(['python', 'dota2.py'])
-        self.create_repeat_file("repeat-dota2.txt", self.repeat_count_spinbox_dota2.value())
-
-    def stop_dota2_script(self):
-        if self.dota2_process is not None:
-            self.dota2_process.terminate()
-            self.dota2_process = None
-
-    def start_dota3_script(self):
-        self.dota3_process = subprocess.Popen(['python', 'dota3.py'])
-        self.create_repeat_file("repeat-dota3.txt", self.repeat_count_spinbox_dota3.value())
-
-    def stop_dota3_script(self):
-        if self.dota3_process is not None:
-            self.dota3_process.terminate()
-            self.dota3_process = None
-
-    def create_repeat_file(self, filename, cycles):
-        with open(filename, 'w') as file:
-            file.write(str(cycles))
-
-    def safe_remove_file(self, filename):
-        try:
-            os.remove(filename)
-        except FileNotFoundError:
-            pass
-        except PermissionError:
-            time.sleep(0.1)  # Ждем 100 мс и пытаемся снова
-            self.safe_remove_file(filename)
-
-    def update_status_dota_status(self):
-        cycles = self.repeat_count_spinbox_dota.value()
-        self.status_label_dota_cycles.setText(f'Количество циклов: {cycles}')
-        if self.toggle_auto_search_checkbox.isChecked():
-            self.update_status_dota("В ожидании")
-
-    def update_status_dota2_status(self):
-        cycles = self.repeat_count_spinbox_dota2.value()
-        self.status_label_dota2_cycles.setText(f'Количество циклов: {cycles}')
-        if self.toggle_auto_pick_checkbox.isChecked():
-            self.update_status_dota2("В ожидании")
-
-    def update_status_dota3_status(self):
-        cycles = self.repeat_count_spinbox_dota3.value()
-        self.status_label_dota3_cycles.setText(f'Количество циклов: {cycles}')
-        if self.toggle_auto_purchase_checkbox.isChecked():
-            self.update_status_dota3("В ожидании")
-
-    def update_status_dota(self, status):
-        self.status_label_dota_status.setText(f'Состояние: {status}')
-
-    def update_status_dota2(self, status):
-        self.status_label_dota2_status.setText(f'Состояние: {status}')
-
-    def update_status_dota3(self, status):
-        self.status_label_dota3_status.setText(f'Состояние: {status}')
-
+    def check_auto_search_completion(self):
+        # Сюда можно добавить логику, которая будет выполняться при завершении автопоиска
+        pass
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

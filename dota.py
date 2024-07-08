@@ -5,8 +5,6 @@ import time
 import pygetwindow as gw
 import sys
 import os
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 # Путь к папке с изображениями
 ICON_DIR = "./icons/"
@@ -16,7 +14,6 @@ GAMETT_THRESHOLD = 0.8
 KNOPKA_THRESHOLD = 0.8
 
 # Глобальные переменные для работы цикла
-running = False
 repeat_count = 1  # По умолчанию 1 цикл
 delay_between_cycles = 15  # По умолчанию 15 секунд
 
@@ -35,59 +32,46 @@ def activate_dota2_window():
 
 # Функция для выполнения действий в Dota 2
 def perform_dota2_actions():
-    global running, repeat_count, delay_between_cycles
+    global repeat_count, delay_between_cycles
     
     dota2_window_list = gw.getWindowsWithTitle("Dota 2")
     if dota2_window_list:
         if not is_window_minimized(dota2_window_list[0]):
-            running = True
-            
             for current_cycle in range(1, repeat_count + 1):
                 print(f"Цикл {current_cycle}/{repeat_count} начат")
                 
                 # Ожидание появления изображения game.png
-                while not image_exists('game.png', threshold=GAMETT_THRESHOLD):
+                while not image_exists('game.png', GAMETT_THRESHOLD):
                     print("Изображение game.png не найдено. Ожидание...")
                     time.sleep(1)
                 
                 print("Изображение game.png найдено. Продолжаем выполнение...")
                 
                 # Нажатие на изображение game.png
-                click_image('game.png', threshold=GAMETT_THRESHOLD)
+                click_image('game.png', GAMETT_THRESHOLD)
                 time.sleep(1)
                 
                 # Нажатие на кнопку "Найти игру" по координатам (1750, 1025)
                 pyautogui.click(1750, 1025)
                 time.sleep(1)
                 
-                while running:
-                    # Проверка наличия gamett.png
-                    if image_exists('gamett.png', threshold=GAMETT_THRESHOLD):
-                        print("Игра началась.")
-                        break
-                    
+                # Проверка наличия изображения gamett.png
+                while not image_exists('gamett.png', GAMETT_THRESHOLD):
                     # Если gamett.png не найдено, ищем knopka.png и принимаем игру
-                    if image_exists('knopka.png', threshold=KNOPKA_THRESHOLD):
+                    if image_exists('knopka.png', KNOPKA_THRESHOLD):
                         print("Кнопка принятия найдена. Принимаем игру...")
                         accept_game()
-                
-                    # Повторная проверка на gamett.png
-                    time.sleep(0.5)
+                        time.sleep(1)  # Небольшая задержка после принятия игры
+                    else:
+                        print("Кнопка принятия не найдена. Ждем 1 секунду и повторяем...")
+                        time.sleep(1)
                 
                 print(f"Цикл {current_cycle}/{repeat_count} завершен.")
                 
                 if current_cycle < repeat_count:
                     print(f"Ожидание {delay_between_cycles} секунд до следующего цикла...")
                     time.sleep(delay_between_cycles)
-            
-            running = False
-            print("Скрипт завершен.")
-            
-            # Создание текстового файла autosearch.txt после завершения всех циклов
-            time.sleep(1)  # Добавляем задержку перед записью в файл
-            if current_cycle == repeat_count:
-                write_autosearch_file()
-
+        
         else:
             print("Окно Dota 2 не активно или свернуто.")
     else:
@@ -103,7 +87,7 @@ def write_autosearch_file():
         print(f"Ошибка при записи в файл autosearch.txt: {e}")
 
 # Функция для проверки наличия изображения на экране
-def image_exists(image_name, threshold=GAMETT_THRESHOLD):
+def image_exists(image_name, threshold):
     image_path = os.path.join(ICON_DIR, image_name)
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
     if image is None:
@@ -117,13 +101,13 @@ def image_exists(image_name, threshold=GAMETT_THRESHOLD):
     _, max_val, _, _ = cv2.minMaxLoc(result)
     
     if max_val >= threshold:
-        print(f"Найдено изображение с коэффициентом совпадения {max_val}")
+        print(f"Найдено изображение {image_name} с коэффициентом совпадения {max_val}")
         return True
     
     return False
 
 # Функция для клика по изображению на экране
-def click_image(image_name, threshold=GAMETT_THRESHOLD):
+def click_image(image_name, threshold):
     image_path = os.path.join(ICON_DIR, image_name)
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
     if image is None:
@@ -148,7 +132,7 @@ def click_image(image_name, threshold=GAMETT_THRESHOLD):
     
     return False
 
-# Объединенная функция для принятия игры
+# Функция для принятия игры
 def accept_game():
     accept_button_location = None
     while accept_button_location is None:
@@ -177,17 +161,17 @@ def accept_game():
             print("Кнопка принятия не найдена. Ждем 1 секунду и повторяем...")
             time.sleep(1)
 
-# Функция для запуска скрипта
-def start_script():
-    global running, repeat_count
-
-    # Чтение числа циклов из файла repeat-dota.txt
+# Основная функция для запуска скрипта
+def main():
+    global repeat_count, delay_between_cycles
+    
+    # Чтение числа циклов из файла repeat_dota.txt
     try:
-        with open("repeat-dota.txt", "r") as f:
+        with open("repeat_dota.txt", "r") as f:
             repeat_count = int(f.read().strip())
-            print(f"Прочитано число циклов из repeat-dota.txt: {repeat_count}")
+            print(f"Прочитано число циклов из repeat_dota.txt: {repeat_count}")
     except (FileNotFoundError, ValueError) as e:
-        print(f"Ошибка чтения файла repeat-dota.txt: {e}")
+        print(f"Ошибка чтения файла repeat_dota.txt: {e}")
         return
 
     if activate_dota2_window():
@@ -195,37 +179,8 @@ def start_script():
     else:
         print("Не удалось активировать окно Dota 2.")
 
+    write_autosearch_file()
     print("Скрипт завершен.")
-
-# Класс для обработки событий файловой системы
-class Dota2FileHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        # Здесь можно добавить обработчик изменений файлов, если потребуется в будущем
-        pass
-
-# Основная функция для запуска скрипта
-def main():
-    global delay_between_cycles
-    
-    # Проверка аргументов командной строки
-    if len(sys.argv) > 1:
-        try:
-            delay_between_cycles = int(sys.argv[1])
-        except ValueError:
-            print("Ошибка: Некорректный ввод. Используется значение по умолчанию.")
-    
-    observer = Observer()
-    event_handler = Dota2FileHandler()
-    observer.schedule(event_handler, path='.', recursive=False)
-    observer.start()
-
-    try:
-        start_script()
-    except ValueError:
-        print("Некорректный ввод.")
-
-    observer.stop()
-    observer.join()
 
 if __name__ == '__main__':
     main()
