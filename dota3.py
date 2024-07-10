@@ -55,11 +55,11 @@ def click_image(location, image_shape):
 
 def main():
     # Ожидание появления файла repeat-dota3.txt
-    while not os.path.exists("repeat-dota3.txt"):
+    while not os.path.exists("repeat_dota3.txt"):
         time.sleep(3)
     
     # Чтение количества циклов из файла
-    with open("repeat-dota3.txt", "r") as file:
+    with open("repeat_dota3.txt", "r") as file:
         try:
             num_cycles = int(file.read().strip())
         except ValueError:
