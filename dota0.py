@@ -7,6 +7,19 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.signal_files = {
+            'autosearch': 'autosearch.txt',
+            'autopick': 'autopick.txt',
+            'autobuy': 'autobuy.txt'
+        }
+
+        self.setup_timer()
+
+    def setup_timer(self):
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.check_for_auto_files)
+        self.timer.start(5000)  # Проверяем каждые 5 секунд
+
         self.dota_process = None
         self.dota2_process = None
         self.dota3_process = None
@@ -22,6 +35,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.selected_heroes = []  # список выбранных героев для Autopick
 
         self.initUI()
+        self.check_for_auto_files()  # Проверяем наличие файлов при запуске
 
     def initUI(self):
         self.setWindowTitle('Dota Automation')
@@ -68,6 +82,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.close_button = QtWidgets.QPushButton('Закрыть', self)
         self.close_button.clicked.connect(self.close_application)
         grid_layout.addWidget(self.close_button, 0, 4)
+
+        # Все кнопки на главной вкладке всегда доступны
+        self.start_all_button.setEnabled(True)
+        self.stop_all_button.setEnabled(True)
+        self.start_selected_button.setEnabled(True)
+        self.stop_selected_button.setEnabled(True)
+        self.close_button.setEnabled(True)
 
         self.create_status_table(grid_layout)
 
@@ -148,7 +169,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.heroes_count_label = QtWidgets.QLabel('Количество героев: (0)')
         layout.addWidget(self.heroes_count_label)
 
-        self.populate_hero_icons()
+        self.populate_hero_icons()  # Call to method for hero icons
 
         tab.setLayout(layout)
         return tab
@@ -224,237 +245,189 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cycle_labels["Autobuy"].setText(f'Количество циклов: {self.dota3_cycles}')
 
     def start_all_scripts(self):
+        # Устанавливаем все чекбоксы в положение "Включено"
         self.toggle_auto_search_checkbox.setChecked(True)
-        self.toggle_auto_pick_checkbox.setChecked(True)
-        self.toggle_auto_buy_checkbox.setChecked(True)
-
         self.dota_status = "Включено"
+
+        self.toggle_auto_pick_checkbox.setChecked(True)
         self.dota2_status = "Включено"
+
+        self.toggle_auto_buy_checkbox.setChecked(True)
         self.dota3_status = "Включено"
 
-        self.delete_repeat_files()
-        self.start_all_button.setEnabled(False)
-        self.stop_all_button.setEnabled(True)
-        self.start_selected_button.setEnabled(False)
-        self.stop_selected_button.setEnabled(True)
-        self.close_button.setEnabled(False)
+        # Запускаем все скрипты
+        self.start_dota_script()
+        self.start_dota2_script()
+        self.start_dota3_script()
 
-        self.start_both_scripts()
+        # Обновляем таблицу статусов
+        self.update_status_table()
+
 
     def stop_all_scripts(self):
-        self.toggle_auto_search_checkbox.setChecked(False)
-        self.toggle_auto_pick_checkbox.setChecked(False)
-        self.toggle_auto_buy_checkbox.setChecked(False)
+        # Останавливаем все скрипты
+        self.stop_dota_script()
+        self.stop_dota2_script()
+        self.stop_dota3_script()
 
+        # Устанавливаем все чекбоксы в положение "Выключено"
+        self.toggle_auto_search_checkbox.setChecked(False)
         self.dota_status = "Выключено"
+
+        self.toggle_auto_pick_checkbox.setChecked(False)
         self.dota2_status = "Выключено"
+
+        self.toggle_auto_buy_checkbox.setChecked(False)
         self.dota3_status = "Выключено"
 
-        self.dota_cycles = 1
-        self.dota2_cycles = 1
-        self.dota3_cycles = 1
+        # Обновляем таблицу статусов
+        self.update_status_table()
 
-        self.delete_repeat_files()
-        self.stop_both_scripts()
-        self.start_all_button.setEnabled(True)
-        self.stop_all_button.setEnabled(False)
-        self.start_selected_button.setEnabled(True)
-        self.stop_selected_button.setEnabled(False)
-        self.close_button.setEnabled(True)
 
     def start_selected_scripts(self):
-        if self.dota_status == "Включено":
-            self.create_repeat_file('repeat_dota.txt', self.dota_cycles)
-            self.start_dota_script()
-
-        if self.dota2_status == "Включено":
-            self.create_repeat_file('repeat_dota2.txt', self.dota2_cycles)
-            self.start_dota2_script()
-            self.create_selected_heroes_file(self.selected_heroes)
-
-        if self.dota3_status == "Включено":
-            self.create_repeat_file('repeat_dota3.txt', self.dota3_cycles)
-            self.start_dota3_script()
-
-        self.start_selected_button.setEnabled(False)
-        self.stop_selected_button.setEnabled(True)
+        self.start_dota2_script()
 
     def stop_selected_scripts(self):
-        if self.dota_status == "В работе":
-            self.stop_dota_script()
-
-        if self.dota2_status == "В работе":
-            self.stop_dota2_script()
-
-        if self.dota3_status == "В работе":
-            self.stop_dota3_script()
-
-        self.start_selected_button.setEnabled(True)
-        self.stop_selected_button.setEnabled(False)
-
-    def close_application(self):
-        self.stop_all_scripts()
-        QtWidgets.qApp.quit()
-
-    def create_repeat_files(self):
-        if self.dota_status == "Включено":
-            self.create_repeat_file('repeat_dota.txt', self.dota_cycles)
-
-        if self.dota2_status == "Включено":
-            self.create_repeat_file('repeat_dota2.txt', self.dota2_cycles)
-
-        if self.dota3_status == "Включено":
-            self.create_repeat_file('repeat_dota3.txt', self.dota3_cycles)
-
-    def delete_repeat_files(self):
-        if os.path.exists('repeat_dota.txt'):
-            os.remove('repeat_dota.txt')
-
-        if os.path.exists('repeat_dota2.txt'):
-            os.remove('repeat_dota2.txt')
-
-        if os.path.exists('repeat_dota3.txt'):
-            os.remove('repeat_dota3.txt')
-            
-        if os.path.exists('selected_heroes.txt'):
-            os.remove('selected_heroes.txt')
-        
-
-    def create_repeat_file(self, filename, cycles):
-        with open(filename, 'w') as file:
-            file.write(str(cycles))
-
-    def start_both_scripts(self):
-        if self.dota_status == "Включено":
-            self.dota_process = subprocess.Popen([sys.executable, 'dota.py'])
-
-        if self.dota2_status == "Включено":
-            self.dota2_process = subprocess.Popen([sys.executable, 'dota2.py'])
-
-        if self.dota3_status == "Включено":
-            self.dota3_process = subprocess.Popen([sys.executable, 'dota3.py'])
-
-    def stop_both_scripts(self):
-        if self.dota_process:
-            self.dota_process.terminate()
-            self.dota_process = None
-
-        if self.dota2_process:
-            self.dota2_process.terminate()
-            self.dota2_process = None
-
-        if self.dota3_process:
-            self.dota3_process.terminate()
-            self.dota3_process = None
+        self.stop_dota2_script()
 
     def start_dota_script(self):
-        self.dota_process = subprocess.Popen([sys.executable, 'dota.py'])
+        if self.dota_status == "Включено":
+            self.dota_process = subprocess.Popen(['python', 'dota.py'])
+            self.update_repeat_dota_file()
+
+    def start_dota2_script(self):
+        if self.dota2_status == "Включено":
+            self.dota2_process = subprocess.Popen(['python', 'dota2.py'])
+            self.update_repeat_dota2_file()
+            self.update_selected_heroes_file()
+
+    def start_dota3_script(self):
+        if self.dota3_status == "Включено":
+            self.dota3_process = subprocess.Popen(['python', 'dota3.py'])
+            self.update_repeat_dota3_file()
 
     def stop_dota_script(self):
         if self.dota_process:
             self.dota_process.terminate()
             self.dota_process = None
-
-    def start_dota2_script(self):
-        self.dota2_process = subprocess.Popen([sys.executable, 'dota2.py'])
+            self.delete_repeat_dota_file()
 
     def stop_dota2_script(self):
         if self.dota2_process:
             self.dota2_process.terminate()
             self.dota2_process = None
-
-    def start_dota3_script(self):
-        self.dota3_process = subprocess.Popen([sys.executable, 'dota3.py'])
+            self.delete_repeat_dota2_file()
+            self.delete_selected_heroes_file()
 
     def stop_dota3_script(self):
         if self.dota3_process:
             self.dota3_process.terminate()
             self.dota3_process = None
+            self.delete_repeat_dota3_file()
 
-    def check_signal_flags(self):
-        if os.path.exists('autosearch.txt'):
-            self.stop_dota_script()
-            self.dota_cycles = 1
-            self.dota_status = "Выключено"
-            self.toggle_auto_search_checkbox.setChecked(False)
-            self.delete_repeat_files()
-            os.remove('autosearch.txt')
-
-        if os.path.exists('autopick.txt'):
-            self.stop_dota2_script()
-            self.dota2_cycles = 1
-            self.dota2_status = "Выключено"
-            self.toggle_auto_pick_checkbox.setChecked(False)
-            self.delete_repeat_files()
-            os.remove('autopick.txt')
-            self.delete_selected_heroes_file()
-
-        if os.path.exists('autobuy.txt'):
-            self.stop_dota3_script()
-            self.dota3_cycles = 1
-            self.dota3_status = "Выключено"
-            self.toggle_auto_buy_checkbox.setChecked(False)
-            self.delete_repeat_files()
-            os.remove('autobuy.txt')
-            
-    def delete_selected_heroes_file(self):
-        if os.path.exists('selected_heroes.txt'):
-            os.remove('selected_heroes.txt')
-
-    def run(self):
-        self.check_signal_flags()
-        self.update_status_table()
-        QtWidgets.qApp.exec_()
+    def close_application(self):
+        self.stop_all_scripts()
+        QtWidgets.qApp.quit()
 
     def populate_hero_icons(self):
         icons_folder = 'icons/pretty heroes'
         heroes = os.listdir(icons_folder)
-        row = 0
-        col = 0
+        row, col = 0, 0
         for hero in heroes:
-            hero_button = QtWidgets.QPushButton()
-            hero_icon = QtGui.QPixmap(os.path.join(icons_folder, hero)).scaled(80, 80, QtCore.Qt.KeepAspectRatio)
-            hero_button.setIcon(QtGui.QIcon(hero_icon))
-            hero_button.setIconSize(QtCore.QSize(80, 80))
-            hero_button.setToolTip(hero.split('.')[0])  # Устанавливаем название героя без расширения
-            hero_button.clicked.connect(self.select_hero)
-            self.selected_heroes_layout.addWidget(hero_button, row, col)
-            col += 1
-            if col >= 5:
+            if col == 4:
                 col = 0
                 row += 1
+            hero_name = hero.split('.')[0].capitalize()
+            button = QtWidgets.QPushButton(hero_name)
+            button.setIcon(QtGui.QIcon(os.path.join(icons_folder, hero)))
+            button.setIconSize(QtCore.QSize(64, 64))
+            button.clicked.connect(lambda checked, name=hero_name, button=button: self.toggle_hero_selection(name, button))
+            self.selected_heroes_layout.addWidget(button, row, col)
+            col += 1
 
-    def select_hero(self):
-        sender_button = self.sender()
-        hero_name = sender_button.toolTip()
+    def toggle_hero_selection(self, hero_name, sender_button):
         if hero_name in self.selected_heroes:
             self.selected_heroes.remove(hero_name)
             sender_button.setStyleSheet("")
         else:
             self.selected_heroes.append(hero_name)
             sender_button.setStyleSheet("border: 2px solid red;")
+        self.update_selected_heroes_status()
 
-        # Обновляем информацию о выбранных героях
-        self.update_heroes_information()
+    def update_selected_heroes_status(self):
+        self.heroes_status_label.setText(f'Название героев: ({", ".join(self.selected_heroes)})')
+        self.heroes_count_label.setText(f'Количество героев: ({len(self.selected_heroes)})')
 
-    def update_heroes_information(self):
-        if len(self.selected_heroes) > 0:
-            self.heroes_status_label.setText(f'Название героев: {", ".join(self.selected_heroes)}')
-            self.heroes_count_label.setText(f'Количество героев: {len(self.selected_heroes)}')
-        else:
-            self.heroes_status_label.setText('Название героев: (не выбрано)')
-            self.heroes_count_label.setText('Количество героев: (0)')
+    def update_selected_heroes_file(self):
+        if self.selected_heroes:
+            with open('selected_heroes.txt', 'w', encoding='utf-8') as f:
+                for hero in self.selected_heroes:
+                    f.write(f"{hero}.png , .\\icons\\heroes\\{hero.lower()}.png\n")
 
-    def create_selected_heroes_file(self, selected_heroes):
-        with open('selected_heroes.txt', 'w') as file:
-            for hero in selected_heroes:
-                file.write(hero + '\n')
+    def update_repeat_dota_file(self):
+        if self.dota_process:
+            with open('repeat_dota.txt', 'w') as f:
+                f.write(str(self.dota_cycles))
+
+    def update_repeat_dota2_file(self):
+        if self.dota2_process:
+            with open('repeat_dota2.txt', 'w') as f:
+                f.write(str(self.dota2_cycles))
+
+    def update_repeat_dota3_file(self):
+        if self.dota3_process:
+            with open('repeat_dota3.txt', 'w') as f:
+                f.write(str(self.dota3_cycles))
+
+    def delete_repeat_dota_file(self):
+        if os.path.exists('repeat_dota.txt'):
+            os.remove('repeat_dota.txt')
+
+    def delete_repeat_dota2_file(self):
+        if os.path.exists('repeat_dota2.txt'):
+            os.remove('repeat_dota2.txt')
+
+    def delete_repeat_dota3_file(self):
+        if os.path.exists('repeat_dota3.txt'):
+            os.remove('repeat_dota3.txt')
 
     def delete_selected_heroes_file(self):
         if os.path.exists('selected_heroes.txt'):
             os.remove('selected_heroes.txt')
+            
+    def check_for_auto_files(self):
+        for action, file_name in self.signal_files.items():
+            if os.path.exists(file_name):
+                print(f"Файл {file_name} обнаружен")
+                self.handle_signal_file(action, file_name)
+
+    def handle_signal_file(self, action, signal_file):
+        if action == 'autosearch':
+            self.stop_dota_script()
+            self.toggle_auto_search_checkbox.setChecked(False)
+            self.dota_status = "Выключено"
+            self.delete_repeat_dota_file()
+            print(f"Чекбокс на вкладке dota.py сброшен и файлы удалены")
+        elif action == 'autopick':
+            self.stop_dota2_script()
+            self.toggle_auto_pick_checkbox.setChecked(False)
+            self.dota2_status = "Выключено"
+            self.delete_repeat_dota2_file()
+            self.delete_selected_heroes_file()
+            print(f"Чекбокс на вкладке dota2.py сброшен и файлы удалены")
+        elif action == 'autobuy':
+            self.stop_dota3_script()
+            self.toggle_auto_buy_checkbox.setChecked(False)
+            self.dota3_status = "Выключено"
+            self.delete_repeat_dota3_file()
+            print(f"Чекбокс на вкладке dota3.py сброшен и файлы удалены")
+
+        self.update_status_table()
+        if os.path.exists(signal_file):
+            os.remove(signal_file)
+            print(f"Файл {signal_file} удален")
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    mainWin = MainWindow()
-    mainWin.run()
+    mainWindow = MainWindow()
+    sys.exit(app.exec_())
