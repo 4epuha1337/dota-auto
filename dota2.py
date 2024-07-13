@@ -13,7 +13,7 @@ SELECTED_HEROES_FILE = os.path.join(CURRENT_DIR, "selected_heroes.txt")
 ICONS_FOLDER = os.path.join(CURRENT_DIR, "icons")
 HEROES_ICONS_FOLDER = os.path.join(ICONS_FOLDER, "heroes")
 AUTO_PICK_FILE = os.path.join(CURRENT_DIR, "autopick.txt")
-REPEAT_COUNT_FILE = os.path.join(CURRENT_DIR, "repeat_dota2.txt")
+REPEAT_FILE = os.path.join(CURRENT_DIR, "repeat_dota2.txt")
 
 # Функция для чтения выбранных героев из файла
 def read_selected_heroes():
@@ -28,14 +28,26 @@ def read_selected_heroes():
         print(f"Ошибка при чтении файла {SELECTED_HEROES_FILE}: {e}")
         return []
 
+# Функция для чтения количества циклов из файла repeat_dota2.txt
+def read_repeat_count():
+    try:
+        with open(REPEAT_FILE, "r") as file:
+            repeat_count = int(file.read().strip())
+        return repeat_count
+    except FileNotFoundError:
+        print(f"Файл {REPEAT_FILE} не найден. Используется значение по умолчанию: 1 цикл.")
+        return 1
+    except ValueError:
+        print(f"Ошибка при чтении файла {REPEAT_FILE}. Некорректные данные. Используется значение по умолчанию: 1 цикл.")
+        return 1
+    except Exception as e:
+        print(f"Произошла ошибка при чтении файла {REPEAT_FILE}: {e}")
+        return 1
+
 # Функция для выполнения клика по изображению с определенной схожестью
-def click_image_with_similarity(img_path, similarity_threshold, click_pos=(0, 0), click=True):
+def click_image_with_similarity(img_path, similarity_threshold, click_pos=(0, 0), click=True, timeout=7):
     start_time = time.time()
-    while True:
-        if time.time() - start_time > 0.1:
-            print(f"Изображение {img_path} не найдено")
-            return False
-        
+    while time.time() - start_time < timeout:
         screenshot = pyautogui.screenshot()
         screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         
@@ -49,45 +61,34 @@ def click_image_with_similarity(img_path, similarity_threshold, click_pos=(0, 0)
         
         if max_val >= similarity_threshold:
             if click:
-                # Находим координаты центра изображения
                 center_x = max_loc[0] + hero_image.shape[1] // 2
                 center_y = max_loc[1] + hero_image.shape[0] // 2
-                # Наводим курсор на центр изображения + смещение на 5 пикселей вправо
-                pyautogui.moveTo(center_x + 5, center_y)
+                pyautogui.moveTo(center_x + click_pos[0], center_y + click_pos[1])
                 time.sleep(0.5)
                 pyautogui.click()
                 time.sleep(0.5)
             return True
-        else:
-            time.sleep(1)
+        
+        time.sleep(0.5)
+    
+    print(f"Изображение {img_path} не найдено в течение {timeout} секунд.")
+    return False
 
-# Функция для поиска изображения gamett.png с заданным интервалом времени
+# Функция для поиска изображения gamett.png
 def find_gamett():
     while True:
-        if click_image_with_similarity(os.path.join(ICONS_FOLDER, "gamett.png"), 0.8):
+        if click_image_with_similarity(os.path.join(ICONS_FOLDER, "gamett.png"), 0.8, timeout=0.5):
             print("Изображение с игрой найдено")
             return True
         print("Изображение gamett.png не найдено")
         time.sleep(0.5)
 
+# Функция для автоматического выбора героев
 def auto_pick_heroes():
     try:
-        # Ищем изображение gamett.png перед началом выбора героев
-        print("Ищем изображение gamett.png...")
-        if not find_gamett():
-            print("Изображение gamett.png не найдено. Прекращаем выполнение.")
-            return
-        
         # Читаем количество циклов из файла
-        try:
-            with open(REPEAT_COUNT_FILE, "r") as file:
-                repeat_count = int(file.read().strip())
-        except FileNotFoundError:
-            print(f"Файл {REPEAT_COUNT_FILE} не найден.")
-            return
-        except ValueError:
-            print(f"Некорректное значение в файле {REPEAT_COUNT_FILE}.")
-            return
+        repeat_count = read_repeat_count()
+        print(f"Запускаем скрипт с {repeat_count} циклами.")
         
         # Читаем выбранных героев из файла
         selected_heroes = read_selected_heroes()
@@ -95,48 +96,58 @@ def auto_pick_heroes():
             print("Не найдены выбранные герои. Прекращаем выполнение.")
             return
         
-        for i in range(1, repeat_count + 1):
-            print(f"Цикл {i}/{repeat_count} начался.")
-            
-            # Поиск изображения gamett.png перед каждым выбором героя
-            if not find_gamett():
-                print("Изображение gamett.png не найдено. Прекращаем выполнение.")
-                return
-            
-            time.sleep(0.5)  # Пауза перед началом поиска героев
-            
-            # Попытка выбрать случайного героя из списка с учетом приоритетности
-            hero_found = False
-            for hero_entry in selected_heroes:
-                hero_name, hero_path = hero_entry.split(', ')
+        # Ищем изображение gamett.png перед началом выбора героев
+        print("Ищем изображение gamett.png...")
+        if not find_gamett():
+            print("Изображение gamett.png не найдено. Прекращаем выполнение.")
+            return
+        
+        # Интервал между попытками поиска
+        search_interval = 0.5
+        
+        # Приоритетный герой на первой строке списка
+        current_cycle = 1
+        while current_cycle <= repeat_count:
+            print(f"Цикл {current_cycle}/{repeat_count} начат.")
+            for hero_info in selected_heroes:
+                hero_name, hero_path = hero_info.split(', ')
                 hero_img_path = os.path.join(CURRENT_DIR, hero_path)
                 
-                if click_image_with_similarity(hero_img_path, 0.4):
-                    print(f"Герой {hero_name} выбран.")
-                    time.sleep(0.5)  # Пауза перед нажатием pick.png
-                    if click_image_with_similarity(os.path.join(ICONS_FOLDER, "pick.png"), 0.7, click_pos=(5, 0)):
-                        print("Найдено изображение pick.png. Выбираем его.")
+                # Если первый герой - aallrandom.png, выбираем его сразу
+                if hero_name == 'aallrandom.png':
+                    if click_image_with_similarity(hero_img_path, 0.8, timeout=7):
+                        print(f"Герой {hero_name} выбран.")
+                        time.sleep(0.5)
+                        click_image_with_similarity(os.path.join(ICONS_FOLDER, "pick.png"), 0.7, click_pos=(10, 0))
                         pyautogui.moveTo(0, 0)
-                        hero_found = True
-                        break
+                        print("Выбор героя завершен.")
+                else:
+                    # Иначе, выбираем героя с учетом схожести и времени ожидания
+                    if click_image_with_similarity(hero_img_path, 0.5, timeout=7):
+                        print(f"Герой {hero_name} выбран.")
+                        time.sleep(0.5)
+                        click_image_with_similarity(os.path.join(ICONS_FOLDER, "pick.png"), 0.7, click_pos=(10, 0))
+                        pyautogui.moveTo(0, 0)
+                        print("Выбор героя завершен.")
                     else:
-                        print("Изображение pick.png не найдено.")
+                        print(f"Не удалось выбрать героя {hero_name}. Пробуем следующего.")
+                
+                time.sleep(search_interval)
             
-            if not hero_found:
-                print("Не удалось найти ни одного героя из списка.")
-                continue
-            
-            print(f"Цикл {i}/{repeat_count} завершен.")
-            time.sleep(5)
+            print(f"Цикл {current_cycle}/{repeat_count} завершен.")
+            current_cycle += 1
+            if current_cycle <= repeat_count:
+                print(f"Ожидаем 15 секунд перед началом следующего цикла.")
+                time.sleep(15)
         
-        # Создание файла autopick.txt после завершения всех циклов
-        with open(AUTO_PICK_FILE, "w") as file:
-            pass
-        print(f"Файл {AUTO_PICK_FILE} успешно создан.")
+        # Создание файла-сигнала о завершении скрипта
+        with open(AUTO_PICK_FILE, "w") as signal_file:
+            signal_file.write("Автовыбор завершен.")
+        
+        print(f"Все циклы завершены. Файл {AUTO_PICK_FILE} создан.")
     
     except Exception as e:
         print(f"Произошла ошибка в скрипте: {e}")
 
 if __name__ == "__main__":
     auto_pick_heroes()
-
