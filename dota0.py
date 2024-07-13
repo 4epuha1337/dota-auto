@@ -2,17 +2,19 @@ import sys
 import os
 from PyQt5 import QtWidgets, QtGui, QtCore
 import subprocess
+import re
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
+        
 
         self.signal_files = {
             'autosearch': 'autosearch.txt',
             'autopick': 'autopick.txt',
             'autobuy': 'autobuy.txt'
         }
-
+        
         self.setup_timer()
 
     def setup_timer(self):
@@ -38,6 +40,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.initUI()
         self.check_for_auto_files()  # Проверяем наличие файлов при запуске
+        
+                # Таймер для задержки между нажатиями
+        self.click_timer = QtCore.QTimer()
+        self.click_timer.setInterval(100)  # 0.25 секунды
+        self.click_timer.setSingleShot(True)
 
     def initUI(self):
         self.setWindowTitle('Dota Automation')
@@ -502,42 +509,160 @@ class MainWindow(QtWidgets.QMainWindow):
         self.heroes_status_label.setText(f'Название героев: {selected_heroes_text}')
         self.heroes_count_label.setText(f'Количество героев: ({len(self.selected_heroes)})')
 
-    def select_item(self):
-        sender = self.sender()
-        item_name = sender.toolTip()
-        item_cost = sender.property('cost')
+    def select_item(self, item_button):
+        
+        if not isinstance(item_button, QtWidgets.QPushButton):
+            return  # Защита от вызова с неправильным типом аргумента
 
-        # Проверяем, есть ли предмет уже в списке выбранных
-        if item_name in self.selected_items:
-            # Убираем рамку
-            sender.setStyleSheet("")
-            self.remaining_gold += item_cost
-            self.gold_status_label.setText(f'Остаток золота: {self.remaining_gold} gold')
-
-            # Удаляем предмет из списка выбранных предметов
-            self.selected_items.remove(item_name)
-        else:
-            # Проверяем, достаточно ли золота для выбора предмета
-            if item_cost is not None and self.remaining_gold >= item_cost:
-                # Добавляем зеленую рамку
-                sender.setStyleSheet("border: 2px solid green;")
-                self.remaining_gold -= item_cost
-                self.gold_status_label.setText(f'Остаток золота: {self.remaining_gold} gold')
-
-                # Добавляем предмет в список выбранных предметов
-                self.selected_items.append(item_name)
+        
+        
+        item_name = item_button.toolTip()
+        item_cost = item_button.property('cost')
+    
+        initial_remaining_gold = self.remaining_gold  # Сохраняем исходное количество золота
+        initial_selected_items = list(self.selected_items)  # Сохраняем исходные выбранные предметы
+    
+        if QtWidgets.QApplication.mouseButtons() == QtCore.Qt.LeftButton:
+            # Левая кнопка мыши: добавляем предмет
+            if item_name in self.selected_items:
+                item_count = self.selected_items.count(item_name)
+                if item_count < 9:
+                    if self.remaining_gold >= item_cost:
+                        self.selected_items.append(item_name)
+                        self.remaining_gold -= item_cost
+                        self.update_item_button_color(item_button, item_count + 1)
+                    else:
+                        QtWidgets.QMessageBox.warning(self, 'Недостаточно золота', 'У вас недостаточно золота для покупки этого предмета.')
+                        self.reset_to_initial_state(item_button, initial_remaining_gold, initial_selected_items)
+                else:
+                    QtWidgets.QMessageBox.warning(self, 'Максимальное количество предметов', 'Вы уже выбрали максимальное количество предметов (9).')
+                    self.reset_to_initial_state(item_button, initial_remaining_gold, initial_selected_items)
             else:
-                # Выводим сообщение об ошибке (можно дополнительно обработать)
-                QtWidgets.QMessageBox.warning(self, 'Ошибка', 'Недостаточно золота для выбора этого предмета.')
+                if item_cost is not None and self.remaining_gold >= item_cost:
+                    self.selected_items.append(item_name)
+                    self.remaining_gold -= item_cost
+                    self.update_item_button_color(item_button, 1)
+                else:
+                    QtWidgets.QMessageBox.warning(self, 'Недостаточно золота', 'У вас недостаточно золота для покупки этого предмета.')
+                    self.reset_to_initial_state(item_button, initial_remaining_gold, initial_selected_items)
+    
+        elif QtWidgets.QApplication.mouseButtons() == QtCore.Qt.RightButton:
+            # Правая кнопка мыши: уменьшаем предмет
+            if item_name in self.selected_items:
+                self.selected_items.remove(item_name)
+                self.remaining_gold += item_cost  # Возвращаем золото
+                self.update_item_button_color(item_button, self.selected_items.count(item_name))
+            else:
+                # Если предмета нет, просто игнорируем
+                return
+    
+        self.update_selected_items_status()
+        self.update_gold_status()  # Обновляем статус золота
+
+
+
+
+    def update_item_button_color(self, button, count):
+        color_map = {
+            1: "green",
+            2: "blue",
+            3: "red",
+            4: "yellow",
+            5: "purple",
+            6: "black",
+            7: "brown",
+            8: "cyan",
+            9: "orange"
+        }
+        if count == 0:
+            button.setStyleSheet("")  # Сброс цвета
+        else:
+            color = color_map.get(count, "")
+            button.setStyleSheet(f"border: 2px solid {color};")
+
+    def populate_item_icons(self):
+        item_icons_folder = 'icons/items'
+        item_icon_size = 50
+        col_count = 8
+        row = 0
+        col = 0
+
+        for filename in os.listdir(item_icons_folder):
+            if filename.endswith('.png'):
+                item_name = filename.replace('.png', '')
+                item_icon_path = os.path.join(item_icons_folder, filename)
+                item_icon = QtGui.QPixmap(item_icon_path).scaled(item_icon_size, item_icon_size)
+
+                item_button = QtWidgets.QPushButton()
+                item_button.setIcon(QtGui.QIcon(item_icon))
+                item_button.setIconSize(QtCore.QSize(item_icon_size, item_icon_size))
+                item_button.setToolTip(item_name)
+                item_button.setCheckable(True)
+                item_button.setStyleSheet("")  # Инициализируем без рамки
+                item_button.clicked.connect(lambda _, b=item_button: self.select_item(b))
+                item_button.installEventFilter(self)  # Устанавливаем фильтр событий для кнопки
+
+                self.selected_items_layout.addWidget(item_button, row, col)
+
+                # Получаем стоимость предмета из названия файла (если есть число)
+                item_cost = self.get_item_cost(item_name)
+                if item_cost is not None:
+                    item_button.setProperty('cost', item_cost)
+
+                col += 1
+                if col >= col_count:
+                    col = 0
+                    row += 1
 
         self.update_selected_items_status()
 
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.MouseButtonPress:
+            if isinstance(obj, QtWidgets.QPushButton) and obj.toolTip():
+                if self.click_timer.isActive():
+                    return True  # Если таймер активен, игнорируем событие
+                else:
+                    self.click_timer.start()
+                    self.process_click(obj)
+                    return True  # Возвращаем True, чтобы сообщить, что событие было обработано
+    
+        return super().eventFilter(obj, event)
+    
+
+    def update_gold_status(self):
+        self.gold_status_label.setText(f'Остаток золота: {self.remaining_gold} gold')
+        
+
+    def reset_to_initial_state(self, sender, initial_remaining_gold, initial_selected_items):
+        self.selected_items = initial_selected_items.copy()
+        self.remaining_gold = initial_remaining_gold
+        
+        for button in self.selected_items_layout.findChildren(QtWidgets.QPushButton):
+            if button.toolTip() == sender.toolTip():  # Сравниваем по всплывающей подсказке, предполагая, что подсказка уникальна
+                button.setChecked(False)
+                self.update_item_button_color(button, 0)
+        
+        self.update_selected_items_status()
+        self.update_gold_status()
 
     def update_selected_items_status(self):
-        selected_items_text = ', '.join(self.selected_items) if self.selected_items else '(не выбрано)'
+        # Убираем расширение .png и цифры из названий предметов
+        cleaned_items = [item.split('.')[0] for item in self.selected_items]
+        selected_items_text = ', '.join(cleaned_items) if cleaned_items else '(не выбрано)'
         self.items_status_label.setText(f'Предметы: {selected_items_text}')
         self.items_count_label.setText(f'Выбрано предметов: ({len(self.selected_items)})')
+        self.gold_status_label.setText(f'Остаток золота: {self.remaining_gold} gold')
 
+    def handle_right_click_item(self, event):
+        if event.button() == QtCore.Qt.RightButton:
+            self.select_item()
+        else:
+            super().mousePressEvent(event)
+            
+            
+    def process_click(self, button):
+        self.select_item(button)
+        
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow()
