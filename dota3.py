@@ -7,54 +7,48 @@ import os
 # Отключение функции безопасности PyAutoGUI
 pyautogui.FAILSAFE = False
 
-# Путь к папке с изображениями
-ICON_DIR = "./icons/Items/"
-
 # Порог для совпадений изображений
-THRESHOLD = 0.8
+THRESHOLD = 0.7
 
-# Функция для проверки наличия изображения на экране
-def image_exists(image_name, threshold=THRESHOLD):
-    image_path = os.path.join(ICON_DIR, image_name)
+# Путь к папке с изображениями предметов
+ICON_DIR = ".\\icons\\Items"
+
+def image_exists(image_path, threshold=THRESHOLD):
+    # Загрузка изображения предмета
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
     if image is None:
         print(f"Не удалось загрузить изображение: {image_path}")
         return False, None, None
     
+    # Скриншот текущего экрана
     screenshot = pyautogui.screenshot()
-    screenshot_np = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+    screenshot_np = np.array(screenshot)
+    screenshot_bgr = cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
     
-    result = cv2.matchTemplate(screenshot_np, image, cv2.TM_CCOEFF_NORMED)
-    _, max_val, _, max_loc = cv2.minMaxLoc(result)
+    # Поиск изображения предмета на экране
+    result = cv2.matchTemplate(screenshot_bgr, image, cv2.TM_CCOEFF_NORMED)
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
     
     if max_val >= threshold:
-        print(f"Найдено изображение {image_name} с коэффициентом совпадения {max_val}")
-        return True, max_loc, image.shape
-    
-    print(f"Изображение {image_name} не найдено...")
-    return False, None, None
+        # Найдено изображение с заданным порогом совпадения
+        return True, max_loc, image
+    else:
+        return False, None, None
 
-# Функция для клика по изображению на экране с задержкой перед нажатием правой кнопки мыши
-def click_image(location, image_shape):
-    image_center = (
-        int(location[0] + image_shape[1] / 2),
-        int(location[1] + image_shape[0] / 2)
-    )
-    x, y = image_center
+def click_image(location, image):
+    # Получение координат центра изображения
+    center_x = location[0] + image.shape[1] // 2
+    center_y = location[1] + image.shape[0] // 2
     
-    # Наведение мыши на центр изображения с задержкой 0.2 секунды
-    pyautogui.moveTo(x, y)
-    time.sleep(0.2)  # Задержка 0.2 секунды, чтобы "залочить" мышь на изображении
-    
-    # Клик правой кнопкой мыши
+    # Наведение курсора на центр изображения и выполнение правого клика
+    pyautogui.moveTo(center_x, center_y)
+    time.sleep(0.3)  # Задержка перед кликом
     pyautogui.click(button='right')
-    time.sleep(0.2)  # Задержка 0.2 секунды после клика
-    
-    # Возврат мыши в точку (0, 0)
-    pyautogui.moveTo(0, 0)
+    time.sleep(0.3)  # Задержка после клика
+    pyautogui.moveTo(0, 0)  # Перемещение курсора в точку (0, 0)
 
 def main():
-    # Ожидание появления файла repeat-dota3.txt
+    # Ожидание появления файла repeat_dota3.txt
     while not os.path.exists("repeat_dota3.txt"):
         time.sleep(3)
     
@@ -63,36 +57,49 @@ def main():
         try:
             num_cycles = int(file.read().strip())
         except ValueError:
-            print("Ошибка чтения файла repeat-dota3.txt")
+            print("Ошибка чтения файла repeat_dota3.txt")
             return
     
     print(f"Будет выполнено {num_cycles} циклов")
+    
+    # Чтение списка предметов и их путей из файла selected_items.txt
+    items_list = []
+    with open("selected_items.txt", "r") as items_file:
+        for line in items_file:
+            parts = line.strip().split(",")
+            if len(parts) == 2:
+                item_name = parts[0].strip()
+                item_path = parts[1].strip()
+                items_list.append((item_name, item_path))
+    
+    if not items_list:
+        print("Список предметов пуст или не удалось прочитать из файла selected_items.txt")
+        return
+    
+    print("Список предметов для закупки:")
+    for item_name, _ in items_list:
+        print(f"- {item_name}")
     
     # Выполнение циклов
     for cycle in range(1, num_cycles + 1):
         print(f"Цикл {cycle}/{num_cycles} начат")
         
-        # Проверка на наличие boots.png
-        found_boots = False
-        while not found_boots:
-            found_boots, location_boots, shape_boots = image_exists('boots.png')
-            if found_boots:
-                click_image(location_boots, shape_boots)
-                print(f"Нажатие на boots.png и перемещение курсора в точку (0, 0)")
-            else:
-                print("Поиск boots.png...")
-                time.sleep(1)  # Проверка раз в 3 секунды
-        
-        # Проверка на наличие tango.png
-        found_tango = False
-        while not found_tango:
-            found_tango, location_tango, shape_tango = image_exists('tango.png')
-            if found_tango:
-                click_image(location_tango, shape_tango)
-                print(f"Нажатие на tango.png и перемещение курсора в точку (0, 0)")
-            else:
-                print("Поиск tango.png...")
-                time.sleep(3)  # Проверка раз в 3 секунды
+        # Проход по списку предметов и их поиск на экране
+        remaining_items = items_list[:]
+        while remaining_items:
+            for item_name, item_path in remaining_items[:]:
+                found_item = False
+                while not found_item:
+                    found_item, location, image = image_exists(item_path)
+                    if found_item:
+                        click_image(location, image)
+                        print(f"Нажатие на {item_name} и перемещение курсора в точку (0, 0)")
+                        time.sleep(1)  # Задержка после нажатия
+                        pyautogui.moveTo(0, 0)  # Перемещение курсора в точку (0, 0)
+                        remaining_items.remove((item_name, item_path))
+                    else:
+                        print(f"Поиск {item_name}...")
+                        time.sleep(0.5)  # Проверка раз в 1 секунду
         
         print(f"Цикл {cycle}/{num_cycles} завершен")
         
