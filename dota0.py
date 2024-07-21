@@ -4,6 +4,7 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 import subprocess
 import re
 import dota2
+import dota3
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -12,8 +13,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.signal_files = {
             'autosearch': 'autosearch.txt',
-            'autopick': 'autopick.txt',
-            'autobuy': 'autobuy.txt'
         }
         
         self.setup_timer()
@@ -423,36 +422,39 @@ class MainWindow(QtWidgets.QMainWindow):
             self.dota2_status = "Остановлено"
             self.status_labels['Autopick'].setText(f'Состояние: {self.dota2_status}')
 
-
     def start_dota3_script(self):
-        self.dota3_process = subprocess.Popen(['python', 'dota3.py'])
+        # Создаем пустой массив для хранения объектов
+        selected_items_array = []
+
+        # Итерируем по выбранным айтемам и добавляем их в массив в нужном формате
+        for item in self.selected_items:
+            item_object = {
+                'name': item,
+                'icon_path': f'.\\icons\\Items\\{item}.png'
+            }
+            selected_items_array.append(item_object)
+
+        # Создаем и запускаем поток
+        self.dota3_process = dota3.AutoBuy(selected_items=selected_items_array, repeat_count=self.dota3_cycles, on_complete=self.on_autobuy_complete)
+        self.dota3_process.start()
         self.dota3_status = "Запущено"
         self.status_labels['Autobuy'].setText(f'Состояние: {self.dota3_status}')
 
-        # Создаем файл repeat_dota3.txt с текущим количеством циклов
-        with open('repeat_dota3.txt', 'w') as f:
-            f.write(str(self.dota3_cycles))
-
-        # Создаем файл selected_items.txt с выбранными предметами
-        with open('selected_items.txt', 'w') as f:
-            for item in self.selected_items:
-                f.write(f'{item}.png , .\\icons\\Items\\{item}.png\n')
-
-
+    # Метод, который вызывается после выхода из AutoBuy
+    def on_autobuy_complete(self):
+        self.toggle_auto_buy_checkbox.setChecked(False)
+        self.toggle_auto_buy_checkbox.setText("Выключено")
+        self.status_labels['Autobuy'].setText(f'Состояние: Выключено')
+        
+        print("Скрипт Dota 3 остановлен.")
 
     def stop_dota3_script(self):
         if self.dota3_process is not None:
-            self.dota3_process.terminate()
+            self.dota3_process.stop()
+            self.dota3_process.join()
             self.dota3_process = None
-            self.dota3_status = "Остановлено"
+            self.dota3_process = "Остановлено"
             self.status_labels['Autobuy'].setText(f'Состояние: {self.dota3_status}')
-        
-            # Удаляем файлы repeat_dota3.txt и selected_items.txt при остановке
-            if os.path.exists('repeat_dota3.txt'):
-                os.remove('repeat_dota3.txt')
-            if os.path.exists('selected_items.txt'):
-                os.remove('selected_items.txt')
-
 
     def check_for_auto_files(self):
         for key, filename in self.signal_files.items():
@@ -470,21 +472,6 @@ class MainWindow(QtWidgets.QMainWindow):
                         os.remove('repeat_dota.txt')
                         print("Файл repeat_dota.txt удален")
                     print("Сигнальный файл autosearch.txt обнаружен. Скрипт Dota остановлен, все файлы удалены.")
-                
-                elif key == 'autobuy' and self.dota3_process is not None:
-                    self.stop_dota3_script()
-                    self.toggle_auto_buy_checkbox.setChecked(False)
-                    self.toggle_auto_buy_checkbox.setText("Выключено")
-                    self.status_labels['Autobuy'].setText(f'Состояние: Выключено')
-                    if os.path.exists('repeat_dota3.txt'):
-                        os.remove('repeat_dota3.txt')
-                        print("Файл repeat_dota3.txt удален")
-                    if os.path.exists('selected_items.txt'):
-                        os.remove('selected_items.txt')
-                        print("Файл selected_items.txt удален")
-                    print("Сигнальный файл autobuy.txt обнаружен. Скрипт Dota 3 остановлен, все файлы удалены.")
-
-
 
     def select_hero(self):
         sender = self.sender()
