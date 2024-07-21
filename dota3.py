@@ -72,7 +72,7 @@ class AutoBuy(threading.Thread):  # Наследуем от threading.Thread
         # Выполнение циклов
         for cycle in range(1, self.repeat_count + 1):
             if self._stop_event.is_set():
-                print("Остановка работы по запросу.")
+                print("Остановка работы скрипта dota3.py по запросу.")
                 return False
             
             print(f"Цикл {cycle}/{self.repeat_count} начат")
@@ -85,7 +85,7 @@ class AutoBuy(threading.Thread):  # Наследуем от threading.Thread
                 found_item = False
                 while not found_item:
                     if self._stop_event.is_set():
-                        print("Остановка работы по запросу.")
+                        print("Остановка работы скрипта dota3.py по запросу.")
                         return False
                     
                     found_item, location, image = self.image_exists(item_path)

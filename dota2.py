@@ -57,7 +57,7 @@ class HeroesAutoPicker(threading.Thread):  # Наследуем от threading.T
     def find_gamett(self):
         while True:
             if self._stop_event.is_set():
-                print("Остановка работы по запросу.")
+                print("Остановка работы скрипта dota2.py по запросу.")
                 return False
             if self.click_image_with_similarity(os.path.join(ICONS_FOLDER, "gamett.png"), 0.8, timeout=0.5):
                 print("Изображение с игрой найдено")
@@ -87,7 +87,7 @@ class HeroesAutoPicker(threading.Thread):  # Наследуем от threading.T
             current_cycle = 1
             while current_cycle <= self.repeat_count:
                 if self._stop_event.is_set():
-                    print("Остановка работы по запросу.")
+                    print("Остановка работы скрипта dota2.py по запросу.")
                     return False
 
                 print(f"Цикл {current_cycle}/{self.repeat_count} начат.")

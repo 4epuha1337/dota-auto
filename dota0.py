@@ -453,7 +453,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.dota3_process.stop()
             self.dota3_process.join()
             self.dota3_process = None
-            self.dota3_process = "Остановлено"
+            self.dota3_status = "Остановлено"
             self.status_labels['Autobuy'].setText(f'Состояние: {self.dota3_status}')
 
     def check_for_auto_files(self):
