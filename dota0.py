@@ -3,6 +3,7 @@ import os
 from PyQt5 import QtWidgets, QtGui, QtCore
 import subprocess
 import re
+import dota2
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -389,33 +390,38 @@ class MainWindow(QtWidgets.QMainWindow):
                 os.remove('repeat_dota.txt')
 
     def start_dota2_script(self):
-        self.dota2_process = subprocess.Popen(['python', 'dota2.py'])
+        # Создаем пустой массив для хранения объектов
+        selected_heroes_array = []
+
+        # Итерируем по выбранным героям и добавляем их в массив в нужном формате
+        for hero in self.selected_heroes:
+            hero_object = {
+                'name': hero,
+                'icon_path': f'.\\icons\\heroes\\{hero}.png'
+            }
+            selected_heroes_array.append(hero_object)
+
+        # Создаем и запускаем поток
+        self.dota2_process = dota2.HeroesAutoPicker(selected_heroes=selected_heroes_array, repeat_count=self.dota2_cycles, on_complete=self.on_autopick_complete)
+        self.dota2_process.start()
         self.dota2_status = "Запущено"
         self.status_labels['Autopick'].setText(f'Состояние: {self.dota2_status}')
 
-        # Создаем файл repeat_dota2.txt с текущим количеством циклов
-        with open('repeat_dota2.txt', 'w') as f:
-            f.write(str(self.dota2_cycles))
-
-        # Создаем файл selected_heroes.txt с выбранными героями
-        with open('selected_heroes.txt', 'w') as f:
-            for hero in self.selected_heroes:
-                f.write(f'{hero}.png , .\\icons\\heroes\\{hero}.png\n')
-
-
+    # Метод, который вызывается после выхода из AutoPick
+    def on_autopick_complete(self):
+        self.toggle_auto_pick_checkbox.setChecked(False)
+        self.toggle_auto_pick_checkbox.setText("Выключено")
+        self.status_labels['Autopick'].setText(f'Состояние: Выключено')
+        
+        print("Скрипт Dota 2 остановлен.")
 
     def stop_dota2_script(self):
         if self.dota2_process is not None:
-            self.dota2_process.terminate()
+            self.dota2_process.stop()
+            self.dota2_process.join()
             self.dota2_process = None
             self.dota2_status = "Остановлено"
             self.status_labels['Autopick'].setText(f'Состояние: {self.dota2_status}')
-        
-            # Удаляем файлы repeat_dota2.txt и selected_heroes.txt при остановке
-            if os.path.exists('repeat_dota2.txt'):
-                os.remove('repeat_dota2.txt')
-            if os.path.exists('selected_heroes.txt'):
-                os.remove('selected_heroes.txt')
 
 
     def start_dota3_script(self):
@@ -464,19 +470,6 @@ class MainWindow(QtWidgets.QMainWindow):
                         os.remove('repeat_dota.txt')
                         print("Файл repeat_dota.txt удален")
                     print("Сигнальный файл autosearch.txt обнаружен. Скрипт Dota остановлен, все файлы удалены.")
-                
-                elif key == 'autopick' and self.dota2_process is not None:
-                    self.stop_dota2_script()
-                    self.toggle_auto_pick_checkbox.setChecked(False)
-                    self.toggle_auto_pick_checkbox.setText("Выключено")
-                    self.status_labels['Autopick'].setText(f'Состояние: Выключено')
-                    if os.path.exists('repeat_dota2.txt'):
-                        os.remove('repeat_dota2.txt')
-                        print("Файл repeat_dota2.txt удален")
-                    if os.path.exists('selected_heroes.txt'):
-                        os.remove('selected_heroes.txt')
-                        print("Файл selected_heroes.txt удален")
-                    print("Сигнальный файл autopick.txt обнаружен. Скрипт Dota 2 остановлен, все файлы удалены.")
                 
                 elif key == 'autobuy' and self.dota3_process is not None:
                     self.stop_dota3_script()
