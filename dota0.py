@@ -3,6 +3,7 @@ import os
 from PyQt5 import QtWidgets, QtGui, QtCore
 import subprocess
 import re
+import dota
 import dota2
 import dota3
 
@@ -10,18 +11,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         
-
-        self.signal_files = {
-            'autosearch': 'autosearch.txt',
-        }
-        
         self.setup_timer()
 
     def setup_timer(self):
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.check_for_auto_files)
-        self.timer.start(5000)  # Проверяем каждые 5 секунд
-
         self.dota_process = None
         self.dota2_process = None
         self.dota3_process = None
@@ -39,9 +31,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.remaining_gold = 600  # начальное значение золота
 
         self.initUI()
-        self.check_for_auto_files()  # Проверяем наличие файлов при запуске
         
-                # Таймер для задержки между нажатиями
+        # Таймер для задержки между нажатиями
         self.click_timer = QtCore.QTimer()
         self.click_timer.setInterval(100)  # 0.25 секунды
         self.click_timer.setSingleShot(True)
@@ -369,24 +360,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.close()
 
     def start_dota_script(self):
-        self.dota_process = subprocess.Popen(['python', 'dota.py'])
+        # Создаем и запускаем поток
+        self.dota_process = dota.AutoSearch(repeat_count=self.dota_cycles, on_complete=self.on_autosearch_complete)
+        self.dota_process.start()
         self.dota_status = "Запущено"
         self.status_labels['Autosearch'].setText(f'Состояние: {self.dota_status}')
 
-        # Создаем файл repeat_dota.txt с текущим количеством циклов
-        with open('repeat_dota.txt', 'w') as f:
-            f.write(str(self.dota_cycles))
+    # Метод, который вызывается после выхода из AutoSearch
+    def on_autosearch_complete(self):
+        self.toggle_auto_search_checkbox.setChecked(False)
+        self.toggle_auto_search_checkbox.setText("Выключено")
+        self.status_labels['Autosearch'].setText(f'Состояние: Выключено')
+        
+        print("Скрипт Dota остановлен.")
 
     def stop_dota_script(self):
         if self.dota_process is not None:
-            self.dota_process.terminate()
+            self.dota_process.stop()
+            self.dota_process.join()
             self.dota_process = None
             self.dota_status = "Остановлено"
             self.status_labels['Autosearch'].setText(f'Состояние: {self.dota_status}')
-        
-            # Удаляем файл repeat_dota.txt при остановке
-            if os.path.exists('repeat_dota.txt'):
-                os.remove('repeat_dota.txt')
 
     def start_dota2_script(self):
         # Создаем пустой массив для хранения объектов
@@ -455,23 +449,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.dota3_process = None
             self.dota3_status = "Остановлено"
             self.status_labels['Autobuy'].setText(f'Состояние: {self.dota3_status}')
-
-    def check_for_auto_files(self):
-        for key, filename in self.signal_files.items():
-            if os.path.exists(filename):
-                # Удаляем файл сигнала
-                os.remove(filename)
-            
-                # Останавливаем соответствующий скрипт и обновляем интерфейс
-                if key == 'autosearch' and self.dota_process is not None:
-                    self.stop_dota_script()
-                    self.toggle_auto_search_checkbox.setChecked(False)
-                    self.toggle_auto_search_checkbox.setText("Выключено")
-                    self.status_labels['Autosearch'].setText(f'Состояние: Выключено')
-                    if os.path.exists('repeat_dota.txt'):
-                        os.remove('repeat_dota.txt')
-                        print("Файл repeat_dota.txt удален")
-                    print("Сигнальный файл autosearch.txt обнаружен. Скрипт Dota остановлен, все файлы удалены.")
 
     def select_hero(self):
         sender = self.sender()
